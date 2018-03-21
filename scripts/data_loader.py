@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
 import pickle
+import re
+from collections import Counter
 
 import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
@@ -9,7 +11,7 @@ from sklearn.preprocessing import LabelEncoder
 limit = 5000
 
 
-def one_hot_transform(data):
+def transform_to_indices(data):
     values = np.array([b for a in data for b in a])
     label_encoder = LabelEncoder()
     integer_encoded = label_encoder.fit_transform(values)
@@ -58,17 +60,19 @@ def get_keys(fields):
 
 
 def load_sentences():
-    counts = [int(n.strip()) for n in open(path + "/" + dataset + ".nb")][:limit]
+    counts = [int(n.strip()) for n in open(path + "/" + dataset + ".nb")]#[:limit]
     result = []
+    all_sents = []
     with open(path + "/" + dataset + ".sent", encoding="utf-8") as f:
         for person_index in range(len(counts)):
             sent_count = 0
             person = []
             while sent_count < counts[person_index]:
-                person.append(f.readline().strip())
+                person.append(re.sub("[0-9]+","<NUMBER>", re.sub("([1-2]?[0-9]{3}|3000)", "<YEAR>", f.readline().strip())))
+                # all_sents.append(person[-1])
                 sent_count += 1
-            result.append(person[0])
-    return result
+            result.append(person[0].split())
+    return result# , all_sents
 
 
 def create_vocabulary(sents):
@@ -82,19 +86,28 @@ def create_vocabulary(sents):
     return dict([(b, a) for a, b in enumerate(cnts)])
 
 
+def get_most_frequent(all_sents):
+    words = [a for b in all_sents for a in b]
+    c = Counter(words)
+    result = [a[0] for a in c.most_common(20000)]
+    return result
+
+
 if __name__ == '__main__':
     dataset = "valid"
     if "nt" == os.name:
         path = "E:/Martin/PyCharm Projects/StructuredDataNLG/data/" + dataset
     else:
         path = "/data/matulma4/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
+    sentences = load_sentences()
+    get_most_frequent(sentences)
+
     r, f = load_infoboxes()
-    one_hot_transform(r)
+    transform_to_indices(r)
     if not os.path.exists(path + "/" + dataset + ".key"):
         k = sorted(get_keys(f))
         with open(path + "/" + dataset + ".key", "w") as f:
             for key in k:
                 f.write(key + "\n")
-    sentences = load_sentences()
-    voc = create_vocabulary(sentences)
+    # voc = create_vocabulary(sentences)
     pass
