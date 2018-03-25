@@ -11,6 +11,11 @@ from sklearn.preprocessing import LabelEncoder
 limit = 10000
 
 
+def get_occuring(ls, n):
+    counts = Counter(ls)
+    return [i for i in counts if counts[i] >= n]
+
+
 def transform_to_indices(data):
     values = np.array([b for a in data for b in a])
     label_encoder = LabelEncoder()
@@ -31,15 +36,22 @@ def load_infoboxes(path, dataset):
         for person_box in f:
             info = [k.split(":") for k in person_box.strip().split("\t")]
             result.append(dict([(v[0], v[1]) for v in info if v[1] != "<none>"]))
+            field = {}
+            for key in result[-1]:
+                if result[-1][key] in field:
+                    field[result[-1][key]].append(key)
+                else:
+                    field[result[-1][key]] = [key]
+            fields.append(field)
+            i += 1
             if i == limit:
                 break
-            i += 1
-            # d = list(zip(*[(v[0], v[1]) for v in info if v[1] != "<none>"]))
-            # fields.append(list(d[0]))
-            # result.append(list(d[1]))
+                # d = list(zip(*[(v[0], v[1]) for v in info if v[1] != "<none>"]))
+                # fields.append(list(d[0]))
+                # result.append(list(d[1]))
 
     # fields = [list(r.keys()) for r in result]
-    return result[:limit], fields[:limit]
+    return result, fields
 
 
 def get_keys(fields):
