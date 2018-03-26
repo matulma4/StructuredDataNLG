@@ -9,6 +9,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.preprocessing import LabelEncoder
 
 limit = 10000
+l = 10
 
 
 def get_occuring(ls, n):
@@ -25,7 +26,7 @@ def transform_to_indices(data):
     for d in data:
         result.append(integer_encoded[i:i + len(d)])
         i += len(d)
-    return result
+    return result, integer_encoded
 
 
 def load_infoboxes(path, dataset):
@@ -38,10 +39,12 @@ def load_infoboxes(path, dataset):
             result.append(dict([(v[0], v[1]) for v in info if v[1] != "<none>"]))
             field = {}
             for key in result[-1]:
+                s = key.split("_")
+                idx = int(s[-1])
                 if result[-1][key] in field:
-                    field[result[-1][key]].append(key)
+                    field[result[-1][key]].append(("_".join(s[:-1]), min(l, idx), max(1, l - idx + 1)))
                 else:
-                    field[result[-1][key]] = [key]
+                    field[result[-1][key]] = [("_".join(s[:-1]), min(l, idx), max(1, l - idx + 1))]
             fields.append(field)
             i += 1
             if i == limit:
@@ -116,6 +119,25 @@ def delexicalize(sentences, tables, vocabulary):
     return sentences
 
 
+def replace_oov(sentences, vocabulary):
+    for i in range(len(sentences)):
+        sentence = sentences[i]
+        for j in range(len(sentence)):
+            word = sentence[j]
+            if word not in vocabulary:
+                sentence[j] = "<UNK>"
+        sentences[i] = ["s" + str(i) for i in range(l)] + sentence
+    return sentences
+
+
+def get_words():
+    sentences = load_sentences()
+    vocabulary = get_most_frequent(sentences, True)
+    sentences = replace_oov(sentences, vocabulary)
+    indices, encoder = transform_to_indices(sentences)
+    return indices, encoder
+
+
 def get_most_frequent(all_sents, sub_numbers):
     if sub_numbers:
         words = [re.sub("[0-9]+", "<NUMBER>", re.sub("([1-2]?[0-9]{3}|3000)", "<YEAR>", a)) for b in all_sents for a in
@@ -133,8 +155,12 @@ if __name__ == '__main__':
         path = "E:/Martin/PyCharm Projects/StructuredDataNLG/data/" + dataset
     else:
         path = "/data/matulma4/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
+    pass
+
+if __name__ == "__mein__":
     sentences = load_sentences()
     vocabulary = get_most_frequent(sentences, True)
+    transform_to_indices(vocabulary, sentences)
 
     r, f = load_infoboxes(path, dataset)
     # transform_to_indices(r)
