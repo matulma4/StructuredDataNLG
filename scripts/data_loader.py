@@ -29,6 +29,7 @@ def transform_to_indices(data):
     return result, integer_encoded
 
 
+# TODO return only dict of infoboxes, process these in separate method in lebret dir
 def load_infoboxes(path, dataset):
     result = []
     fields = []
@@ -39,12 +40,10 @@ def load_infoboxes(path, dataset):
             info = [k.split(":") for k in person_box.strip().split("\t")]
             result.append(dict([(v[0], v[1]) for v in info if v[1] != "<none>"]))
             unique_keys += ["_".join(s.split("_")[:-1]) for s in result[-1].keys()]
+            # TODO remove limiter
             i += 1
             if i == limit:
                 break
-                # d = list(zip(*[(v[0], v[1]) for v in info if v[1] != "<none>"]))
-                # fields.append(list(d[0]))
-                # result.append(list(d[1]))
     unique_keys = get_occuring(unique_keys, 10)
     le = LabelEncoder()
     tf = dict(zip(unique_keys, le.fit_transform(unique_keys)))
@@ -60,7 +59,6 @@ def load_infoboxes(path, dataset):
                 else:
                     field[r[key]] = [(tf[k], min(l, idx), max(1, l - idx + 1))]
         fields.append(field)
-    # fields = [list(r.keys()) for r in result]
     return result, fields, tf
 
 
@@ -112,6 +110,7 @@ def create_vocabulary(sents):
     return dict([(b, a) for a, b in enumerate(cnts)])
 
 
+# TODO remove?
 def delexicalize(sentences, tables, vocabulary):
     for i in range(len(sentences)):
         table = tables[i]
@@ -135,6 +134,31 @@ def replace_oov(sentences, vocabulary):
                 sentence[j] = "<UNK>"
         sentences[i] = ["s" + str(i) for i in range(l)] + sentence
     return sentences
+
+
+def local_conditioning(tf, f, sentences):
+    F = len(tf)
+    start = []
+    end = []
+    max_len = 0
+    for i in range(len(f)):
+        ib = f[i]
+        sent = sentences[i]
+        s_seq = []
+        e_seq = []
+        for word in sent:
+            if word in ib.keys():
+                s_seq.append(list(set([j[1] + j[0] * l for j in ib[word]])))
+                e_seq.append(list(set([j[2] + j[0] * l for j in ib[word]])))
+                max_len = max(len(s_seq[-1]), max_len)
+                max_len = max(len(e_seq[-1]), max_len)
+            else:
+                s_seq.append([F * l + 1])
+                e_seq.append([F * l + 1])
+        start.append(s_seq)
+        end.append(e_seq)
+    print(max_len)
+    return np.array(start), np.array(end)
 
 
 def get_words(sentences):
@@ -161,10 +185,12 @@ if __name__ == '__main__':
         path = "E:/Martin/PyCharm Projects/StructuredDataNLG/data/" + dataset
     else:
         path = "/data/matulma4/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
-
-    r, f = load_infoboxes(path, dataset)
+    # TODO print parameters: number of fields used, size of vocabulary
+    # TODO move parameters to separate config file, import
+    r, f, tf = load_infoboxes(path, dataset)
     sentences = load_sentences()
     indices, encoder = get_words(sentences)
+    local_conditioning(tf, f, sentences)
     pass
 
 if __name__ == "__mein__":
