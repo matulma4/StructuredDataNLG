@@ -33,28 +33,35 @@ def load_infoboxes(path, dataset):
     result = []
     fields = []
     i = 0
+    unique_keys = []
     with open(path + "/" + dataset + ".box", encoding="utf-8") as f:
         for person_box in f:
             info = [k.split(":") for k in person_box.strip().split("\t")]
             result.append(dict([(v[0], v[1]) for v in info if v[1] != "<none>"]))
-            field = {}
-            for key in result[-1]:
-                s = key.split("_")
-                idx = int(s[-1])
-                if result[-1][key] in field:
-                    field[result[-1][key]].append(("_".join(s[:-1]), min(l, idx), max(1, l - idx + 1)))
-                else:
-                    field[result[-1][key]] = [("_".join(s[:-1]), min(l, idx), max(1, l - idx + 1))]
-            fields.append(field)
+            unique_keys += ["_".join(s.split("_")[:-1]) for s in result[-1].keys()]
             i += 1
             if i == limit:
                 break
                 # d = list(zip(*[(v[0], v[1]) for v in info if v[1] != "<none>"]))
                 # fields.append(list(d[0]))
                 # result.append(list(d[1]))
-
+    unique_keys = get_occuring(unique_keys, 10)
+    le = LabelEncoder()
+    tf = dict(zip(unique_keys, le.fit_transform(unique_keys)))
+    for r in result:
+        field = {}
+        for key in r:
+            s = key.split("_")
+            k = "_".join(s[:-1])
+            idx = int(s[-1])
+            if k in unique_keys:
+                if r[key] in field:
+                    field[r[key]].append((tf[k], min(l, idx), max(1, l - idx + 1)))
+                else:
+                    field[r[key]] = [(tf[k], min(l, idx), max(1, l - idx + 1))]
+        fields.append(field)
     # fields = [list(r.keys()) for r in result]
-    return result, fields
+    return result, fields, tf
 
 
 def get_keys(fields):
@@ -130,8 +137,7 @@ def replace_oov(sentences, vocabulary):
     return sentences
 
 
-def get_words():
-    sentences = load_sentences()
+def get_words(sentences):
     vocabulary = get_most_frequent(sentences, True)
     sentences = replace_oov(sentences, vocabulary)
     indices, encoder = transform_to_indices(sentences)
@@ -155,6 +161,10 @@ if __name__ == '__main__':
         path = "E:/Martin/PyCharm Projects/StructuredDataNLG/data/" + dataset
     else:
         path = "/data/matulma4/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
+
+    r, f = load_infoboxes(path, dataset)
+    sentences = load_sentences()
+    indices, encoder = get_words(sentences)
     pass
 
 if __name__ == "__mein__":
