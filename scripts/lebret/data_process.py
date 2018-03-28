@@ -11,8 +11,8 @@ from data_loader import load_sentences, load_infoboxes
 def get_words(sentences):
     vocabulary = get_most_frequent(sentences, True)
     sents = replace_oov(sentences, vocabulary)
-    indices, encoder = transform_to_indices(sents)
-    return indices, encoder
+    indices, encoder, max_idx = transform_to_indices(sents)
+    return indices, encoder, max_idx
 
 
 def local_conditioning(tf, f, sentences):
@@ -41,14 +41,18 @@ def local_conditioning(tf, f, sentences):
 
 
 def replace_oov(sentences, vocabulary):
+    new_sentences = []
     for i in range(len(sentences)):
+        new_sentence = []
         sentence = sentences[i]
         for j in range(len(sentence)):
             word = sentence[j]
             if word not in vocabulary:
-                sentence[j] = "<UNK>"
-        sentences[i] = ["s" + str(i) for i in range(l)] + sentence
-    return sentences
+                new_sentence.append("<UNK>")
+            else:
+                new_sentence.append(sentence[j])
+        new_sentences.append(["s" + str(i) for i in range(l)] + new_sentence)
+    return new_sentences
 
 
 def transform_to_indices(data):
@@ -60,7 +64,7 @@ def transform_to_indices(data):
     for d in data:
         result.append(integer_encoded[i:i + len(d)])
         i += len(d)
-    return result, integer_encoded
+    return result, label_encoder, max(integer_encoded)
 
 
 def get_most_frequent(all_sents, sub_numbers):
@@ -93,7 +97,8 @@ def process_infoboxes(unique_keys, dict_list):
     return fields, tf
 
 
-def delexicalize(sentences, tables, vocabulary):
+def delexicalize(sentences, tables, vocabulary, keys):
+    field_names = set()
     for i in range(len(sentences)):
         table = tables[i]
         sentence = sentences[i]
@@ -102,20 +107,25 @@ def delexicalize(sentences, tables, vocabulary):
             if word not in vocabulary:
                 for k in table.keys():
                     if table[k] == word:
-                        sentence[j] = re.sub("[0-9]{2}", "10", k)
+                        sentence[j] = re.sub("[0-9]{2}", str(l), k)
+                        field_name = "_".join(k.split("_")[:-1])
+                        if field_name in keys:
+                            field_names.add(k)
+                        else:
+                            field_names.add("<UNK>")
                         break
-    return sentences
+    return sentences, list(field_names)
 
 
 if __name__ == '__main__':
     dicts, u_keys = load_infoboxes(path, dataset)
     f, tf = process_infoboxes(u_keys, dicts)
     sentences = load_sentences()
-    indices, encoder = get_words(sentences)
-    print("Size of vocabulary: " + str(max(encoder)))
+    indices, encoder, max_idx = get_words(sentences)
+    print("Size of vocabulary: " + str(max_idx))
     print("Number of fields: " + str(len(tf)))
     local_conditioning(tf, f, sentences)
-    sentences = delexicalize(sentences, dicts, encoder.classes_)
+    sentences = delexicalize(sentences, dicts, encoder.classes_, u_keys)
 
     glob_f_vec = np.arange(len(tf))
-    glob_w_vec = np.arange(max(encoder))
+    glob_w_vec = np.arange(max_idx)
