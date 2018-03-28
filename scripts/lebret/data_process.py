@@ -117,6 +117,21 @@ def delexicalize(sentences, tables, vocabulary, keys):
     return sentences, list(field_names)
 
 
+def create_samples(indices, start, end):
+    samples = []
+    loc_size = 25
+    for i in range(len(indices)):
+        idx = indices[i]
+        s = start[i]
+        e = end[i]
+        for j in range(l, len(idx)):
+            context = idx[j-l:j]
+            s_context = np.array([np.pad(ss, (0, loc_size - len(ss)), mode='constant') for ss in s[j-l:j]])
+            e_context = np.array([np.pad(ee, (0, loc_size - len(ee)), mode='constant') for ee in e[j-l:j]])
+            samples.append(s_context)
+        return samples
+
+
 if __name__ == '__main__':
     dicts, u_keys = load_infoboxes(path, dataset)
     f, tf = process_infoboxes(u_keys, dicts)
@@ -124,8 +139,10 @@ if __name__ == '__main__':
     indices, encoder, max_idx = get_words(sentences)
     print("Size of vocabulary: " + str(max_idx))
     print("Number of fields: " + str(len(tf)))
-    local_conditioning(tf, f, sentences)
+    start, end = local_conditioning(tf, f, sentences)
     sentences = delexicalize(sentences, dicts, encoder.classes_, u_keys)
-
-    glob_f_vec = np.arange(len(tf))
+    #
+    create_samples(indices, start, end)
+    #
+    # glob_f_vec = np.arange(len(tf))
     glob_w_vec = np.arange(max_idx)
