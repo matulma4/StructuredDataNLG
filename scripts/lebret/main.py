@@ -1,27 +1,8 @@
-import os
-
+import keras.backend as K
 from keras.layers import Embedding, Input, Dense, Activation, Lambda, concatenate, dot, add, Flatten
 from keras.models import Model
-import keras.backend as K
 
-from data_loader import load_infoboxes, get_most_frequent, get_occuring
-import numpy as np
-
-d = 64
-g = 128
-l = 10
-n = 11
-V = 20000
-nhu = 256
-
-
-def embed_table():
-    r, f = load_infoboxes(path, dataset)
-    result = get_occuring([a for rr in r for a in rr.keys()], 100)
-
-    f = len("")
-
-    pass
+from config import *
 
 
 def create_model(loc_dim, glob_dim):
@@ -43,8 +24,8 @@ def create_model(loc_dim, glob_dim):
     flat_context = Flatten()(context)
 
     # loc_dim: number of fields x number of positions
-    local_start = Embedding(input_dim=loc_dim, output_dim=d, input_length=l)(ls_input)
-    local_end = Embedding(input_dim=loc_dim, output_dim=d, input_length=l)(le_input)
+    local_start = Embedding(input_dim=loc_dim, output_dim=d, input_length=l, mask_zero=True)(ls_input)
+    local_end = Embedding(input_dim=loc_dim, output_dim=d, input_length=l, mask_zero=True)(le_input)
     ls_lambda = Lambda(lambda x: K.max(x, axis=1))(local_start)
     le_lambda = Lambda(lambda x: K.max(x, axis=1))(local_end)
     global_field = Embedding(input_dim=glob_dim, output_dim=g, input_length=l)(gf_input)
@@ -58,7 +39,7 @@ def create_model(loc_dim, glob_dim):
     second = Dense(units=V)(first)  # 20000
 
     # Mixing outputs
-    mix = Embedding(input_dim=loc_dim, output_dim=d, input_length=V)(mix_input) # 20000 x  x d
+    mix = Embedding(input_dim=loc_dim, output_dim=d, input_length=V)(mix_input)  # 20000 x  x d
     third = Dense(units=nhu, activation='tanh')(mix)
     max_ftr = Lambda(lambda x: K.max(x, axis=1))(third)
     dot_prod = dot([max_ftr, first], axes=1)
@@ -71,10 +52,5 @@ def create_model(loc_dim, glob_dim):
 
 
 if __name__ == '__main__':
-    dataset = "valid"
-    if "nt" == os.name:
-        path = "E:/Martin/PyCharm Projects/StructuredDataNLG/data/" + dataset
-    else:
-        path = "/data/matulma4/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
     # embed_table()
     create_model(100, 100)
