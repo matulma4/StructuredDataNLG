@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import pickle
-import re
 from collections import Counter
 
 import numpy as np
@@ -14,7 +13,6 @@ def get_occurring(ls, n):
     return [i for i in counts if counts[i] >= n]
 
 
-# TODO return only dict of infoboxes, process these in separate method in lebret dir
 def load_infoboxes(path, dataset):
     result = []
     i = 0
@@ -32,6 +30,23 @@ def load_infoboxes(path, dataset):
     return result, unique_keys
 
 
+def load_sentences():
+    counts = [int(n.strip()) for n in open(path + "/" + dataset + ".nb")][:limit]
+    result = []
+    with open(path + "/" + dataset + ".sent", encoding="utf-8") as f:
+        for person_index in range(len(counts)):
+            sent_count = 0
+            person = []
+            while sent_count < counts[person_index]:
+                # person.append(re.sub("[0-9]+","<NUMBER>", re.sub("([1-2]?[0-9]{3}|3000)", "<YEAR>", f.readline().strip())))
+                person.append(f.readline().strip())
+
+                sent_count += 1
+            result.append(person[0].split())
+    return result
+
+
+# TODO remove?
 def get_keys(fields):
     if not os.path.exists(path + "/" + dataset + ".counts.pickle"):
         counts = {}
@@ -53,22 +68,6 @@ def get_keys(fields):
     return known
 
 
-def load_sentences():
-    counts = [int(n.strip()) for n in open(path + "/" + dataset + ".nb")][:limit]
-    result = []
-    with open(path + "/" + dataset + ".sent", encoding="utf-8") as f:
-        for person_index in range(len(counts)):
-            sent_count = 0
-            person = []
-            while sent_count < counts[person_index]:
-                # person.append(re.sub("[0-9]+","<NUMBER>", re.sub("([1-2]?[0-9]{3}|3000)", "<YEAR>", f.readline().strip())))
-                person.append(f.readline().strip())
-
-                sent_count += 1
-            result.append(person[0].split())
-    return result
-
-
 def create_vocabulary(sents):
     # t = [a for s in sents for a in s.split()]
     # return list(set(t))
@@ -78,21 +77,6 @@ def create_vocabulary(sents):
     names = vectorizer.get_feature_names()
     cnts = [x for _, x in sorted(zip(np.array(y)[0, :], names), reverse=True)]
     return dict([(b, a) for a, b in enumerate(cnts)])
-
-
-# TODO remove?
-def delexicalize(sentences, tables, vocabulary):
-    for i in range(len(sentences)):
-        table = tables[i]
-        sentence = sentences[i]
-        for j in range(len(sentence)):
-            word = sentence[j]
-            if word not in vocabulary:
-                for k in table.keys():
-                    if table[k] == word:
-                        sentence[j] = re.sub("[0-9]{2}", "10", k)
-                        break
-    return sentences
 
 
 if __name__ == '__main__':

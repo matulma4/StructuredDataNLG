@@ -10,8 +10,8 @@ from data_loader import load_sentences, load_infoboxes
 
 def get_words(sentences):
     vocabulary = get_most_frequent(sentences, True)
-    sentences = replace_oov(sentences, vocabulary)
-    indices, encoder = transform_to_indices(sentences)
+    sents = replace_oov(sentences, vocabulary)
+    indices, encoder = transform_to_indices(sents)
     return indices, encoder
 
 
@@ -92,6 +92,21 @@ def process_infoboxes(unique_keys, dict_list):
         fields.append(field)
     return fields, tf
 
+
+def delexicalize(sentences, tables, vocabulary):
+    for i in range(len(sentences)):
+        table = tables[i]
+        sentence = sentences[i]
+        for j in range(len(sentence)):
+            word = sentence[j]
+            if word not in vocabulary:
+                for k in table.keys():
+                    if table[k] == word:
+                        sentence[j] = re.sub("[0-9]{2}", "10", k)
+                        break
+    return sentences
+
+
 if __name__ == '__main__':
     dicts, u_keys = load_infoboxes(path, dataset)
     f, tf = process_infoboxes(u_keys, dicts)
@@ -100,6 +115,7 @@ if __name__ == '__main__':
     print("Size of vocabulary: " + str(max(encoder)))
     print("Number of fields: " + str(len(tf)))
     local_conditioning(tf, f, sentences)
+    sentences = delexicalize(sentences, dicts, encoder.classes_)
 
     glob_f_vec = np.arange(len(tf))
     glob_w_vec = np.arange(max(encoder))
