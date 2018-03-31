@@ -7,34 +7,29 @@ from keras.models import Model
 from config import *
 
 
-# TODO get actual sizes: vocabulary (V)
-# TODO Maximum fields in table (glob_field_dim)
-# TODO Maximum words in table (glob_word_dim)
-# TODO Maximum occurrences of words in field (loc_dim)
-# TODO Maximum index of local embeddings (max_loc_idx)
 def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_field_idx, max_glob_word_idx):
     in_len = 10
     cond_len = 10
     c_input = Input(shape=(in_len,), name='c_input')
 
-    ls_input = Input(shape=(cond_len, loc_dim), name='ls_input')
-    le_input = Input(shape=(cond_len, loc_dim), name='le_input')
+    ls_input = Input(shape=(cond_len, loc_dim,), name='ls_input')
+    le_input = Input(shape=(cond_len, loc_dim,), name='le_input')
 
     gf_input = Input(shape=(glob_field_dim,), name='gf_input')
     gv_input = Input(shape=(glob_word_dim,), name='gw_input')
 
     mix_input = Input(shape=(V,), name='mix_input')
 
-    context = Embedding(input_dim=V, output_dim=d, input_length=1)(c_input)
+    context = Embedding(input_dim=V, output_dim=d, input_length=l)(c_input)
     flat_context = Flatten()(context)
 
     # loc_dim: number of fields x number of positions
     local_start = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=l, mask_zero=True)(ls_input)
     local_end = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=l, mask_zero=True)(le_input)
-    ls_lambda = Lambda(lambda x: K.max(x, axis=2))(local_start)
-    le_lambda = Lambda(lambda x: K.max(x, axis=2))(local_end)
-    flat_ls = Flatten()(ls_lambda)
-    flat_le = Flatten()(le_lambda)
+    ls_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_start)
+    le_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_end)
+    flat_ls = Flatten(input_shape=(l, d))(ls_lambda)
+    flat_le = Flatten(input_shape=(l, d))(le_lambda)
     global_field = Embedding(input_dim=max_glob_field_idx, output_dim=g, input_length=l)(gf_input)
     global_value = Embedding(input_dim=max_glob_word_idx, output_dim=g, input_length=l)(gv_input)
     gf_lambda = Lambda(lambda x: K.max(x, axis=1))(global_field)
