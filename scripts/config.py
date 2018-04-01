@@ -1,6 +1,7 @@
 import os
 
-limit = 10000
+limit = 500
+sample_limit = 1000
 l = 10
 d = 64
 g = 128
@@ -10,6 +11,9 @@ nhu = 256
 
 dataset = "valid"
 if "nt" == os.name:
-    path = "E:/Martin/PyCharm Projects/StructuredDataNLG/data/" + dataset
+    path = "E:/Martin/PyCharm Projects/StructuredDataNLG/"
+    data_path = path + "data/" + dataset
 else:
-    path = "/data/matulma4/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
+    path = "/data/matulma4/StructuredDataNLG/"
+    data_path = "/data/matulma4/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
+

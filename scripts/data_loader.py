@@ -31,9 +31,9 @@ def load_infoboxes(path, dataset):
 
 
 def load_sentences():
-    counts = [int(n.strip()) for n in open(path + "/" + dataset + ".nb")][:limit]
+    counts = [int(n.strip()) for n in open(data_path + "/" + dataset + ".nb")][:limit]
     result = []
-    with open(path + "/" + dataset + ".sent", encoding="utf-8") as f:
+    with open(data_path + "/" + dataset + ".sent", encoding="utf-8") as f:
         for person_index in range(len(counts)):
             sent_count = 0
             person = []
@@ -81,4 +81,3 @@ def create_vocabulary(sents):
 
 if __name__ == '__main__':
     pass
-    # TODO move parameters to separate config file, import

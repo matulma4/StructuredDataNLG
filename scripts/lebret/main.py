@@ -1,19 +1,17 @@
 import pickle
 
 import keras.backend as K
-from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten
+from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation
 from keras.models import Model
 
 from config import *
 
 
 def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_field_idx, max_glob_word_idx):
-    in_len = 10
-    cond_len = 10
-    c_input = Input(shape=(in_len,), name='c_input')
+    c_input = Input(shape=(l,), name='c_input')
 
-    ls_input = Input(shape=(cond_len, loc_dim,), name='ls_input')
-    le_input = Input(shape=(cond_len, loc_dim,), name='le_input')
+    ls_input = Input(shape=(l, loc_dim,), name='ls_input')
+    le_input = Input(shape=(l, loc_dim,), name='le_input')
 
     gf_input = Input(shape=(glob_field_dim,), name='gf_input')
     gv_input = Input(shape=(glob_word_dim,), name='gw_input')
@@ -30,8 +28,8 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     le_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_end)
     flat_ls = Flatten(input_shape=(l, d))(ls_lambda)
     flat_le = Flatten(input_shape=(l, d))(le_lambda)
-    global_field = Embedding(input_dim=max_glob_field_idx, output_dim=g, input_length=l)(gf_input)
-    global_value = Embedding(input_dim=max_glob_word_idx, output_dim=g, input_length=l)(gv_input)
+    global_field = Embedding(input_dim=max_glob_field_idx, output_dim=g, input_length=l, mask_zero=True)(gf_input)
+    global_value = Embedding(input_dim=max_glob_word_idx, output_dim=g, input_length=l, mask_zero=True)(gv_input)
     gf_lambda = Lambda(lambda x: K.max(x, axis=1))(global_field)
     gv_lambda = Lambda(lambda x: K.max(x, axis=1))(global_value)
 
@@ -46,26 +44,23 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     # max_ftr = Lambda(lambda x: K.max(x, axis=1))(third)
     # dot_prod = dot([max_ftr, first], axes=1)
     # final = add([second, dot_prod])
-    # activate = Activation('softmax')(final)
+    activate = Activation('softmax', name='activation')(second)
 
-    model = Model(inputs=[c_input, ls_input, le_input, gf_input, gv_input], outputs=second)
-    model.compile(optimizer='sgd', loss='binary_crossentropy')
+    model = Model(inputs=[c_input, ls_input, le_input, gf_input, gv_input], outputs=activate)
+    model.compile(optimizer='sgd', loss='categorical_crossentropy')
     return model
 
 
 if __name__ == '__main__':
     global V
-    with open("params.txt") as f:
-        V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len = [int(a) for a in f.read().split()]
+    with open(path + "samples/" + dataset + "/params.txt") as f:
+        V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
+                                                                                         f.read().split()]
 
-    samples_context, samples_ls, samples_le, samples_gf, samples_gw, target = pickle.load(open("samples.pickle", "rb"))
+    samples_context, samples_ls, samples_le, samples_gf, samples_gw, target = pickle.load(
+        open(path + "samples/" + dataset + "/samples_0.pickle", "rb"))
     V = target.shape[1]
-    model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim, glob_word_dim)
-    # samples_context = np.array(samples_context)
-    # samples_ls = np.array(samples_ls)
-    # samples_le = np.array(samples_le)
-    # samples_gf = np.array(samples_gf)
-    # samples_gw = np.array(samples_gw)
+    model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim+1, glob_word_dim+1)
     model.fit({'c_input': samples_context, 'ls_input': samples_ls, 'le_input': samples_le,
                'gf_input': samples_gf,
-               'gw_input': samples_gw}, {'second': target}, batch_size=32)
+               'gw_input': samples_gw}, {'activation': target}, batch_size=32)
