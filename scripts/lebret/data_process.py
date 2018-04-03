@@ -11,7 +11,7 @@ from data_loader import load_sentences, load_infoboxes
 
 def get_words(sentences):
     vocabulary = get_most_frequent(sentences, True)
-    sents = replace_oov(sentences, vocabulary)
+    sents = replace_oov(sentences, set(vocabulary))
     indices, encoder, max_idx = transform_to_indices(sents)
     return indices, encoder, max_idx
 
@@ -57,15 +57,15 @@ def replace_oov(sentences, vocabulary):
 
 
 def transform_to_indices(data):
-    values = np.array([b for a in data for b in a])
+    values = list(set(([b for a in data for b in a])))
     label_encoder = LabelEncoder()
-    integer_encoded = label_encoder.fit_transform(values)
+    label_encoder.fit(values)
     i = 0
-    result = []
-    for d in data:
-        result.append(integer_encoded[i:i + len(d)])
-        i += len(d)
-    return result, label_encoder, max(integer_encoded)
+    result = [label_encoder.transform(d) for d in data]
+    # for d in data:
+    #     result.append(integer_encoded[i:i + len(d)])
+    #     i += len(d)
+    return result, label_encoder, max(label_encoder.transform(values))
 
 
 def get_most_frequent(all_sents, sub_numbers):
@@ -82,11 +82,12 @@ def get_most_frequent(all_sents, sub_numbers):
 def process_infoboxes(unique_keys, dict_list, encoder):
     global f_size, w_size, f_len, w_len, w_count
     fields = []
+    u_k = list(unique_keys)
     le = LabelEncoder()
-    tf = dict(zip(unique_keys, le.fit_transform(unique_keys)))
+    tf = dict(zip(u_k, le.fit_transform(u_k)))
     table_fields = []
     table_words = []
-
+    classes = set(encoder.classes_)
     f_len = 0
     w_len = 0
     for r in dict_list:
@@ -105,7 +106,7 @@ def process_infoboxes(unique_keys, dict_list, encoder):
                     field[word].append((tf[k], min(l, idx), max(1, l - idx + 1)))
                 else:
                     field[word] = [(tf[k], min(l, idx), max(1, l - idx + 1))]
-            if word in encoder.classes_:
+            if word in classes:
                 table_w.add(word)
         table_fields.append(list(table_f))
         table_words.append(encoder.transform(list(table_w)))
@@ -117,7 +118,7 @@ def process_infoboxes(unique_keys, dict_list, encoder):
         fields.append(field)
     print("Maximum fields in table: " + str(f_len))
     print("Maximum words in table: " + str(w_len))
-    return fields, tf, table_fields, table_words
+    return fields, tf, table_fields, table_words, classes
 
 
 def delexicalize(sentences, tables, vocabulary, keys):
@@ -141,7 +142,8 @@ def delexicalize(sentences, tables, vocabulary, keys):
 
 
 # TODO make create_one_sample method
-def create_samples(indices, start, end, t_f, t_w, fields):
+# TODO make global conditioning more effective
+def create_samples(indices, start, end, t_f, t_w, fields, tf):
     samples_context = []
     samples_ls = []
     samples_le = []
@@ -200,14 +202,14 @@ if __name__ == '__main__':
     w_len = 0
     w_count = 0
     indices, encoder, max_idx = get_words(sentences)
-    f, tf, t_fields, t_words = process_infoboxes(u_keys, dicts, encoder)
+    f, tf, t_fields, t_words, classes = process_infoboxes(u_keys, dicts, encoder)
     print("Size of vocabulary: " + str(max_idx))
     start, end, max_l = local_conditioning(tf, f, sentences)
     print("Number of fields: " + str(max_l))
-    sentences, f_names = delexicalize(sentences, dicts, encoder.classes_, u_keys)
+    sentences, f_names = delexicalize(sentences, dicts, classes, u_keys)
     output = np.concatenate((encoder.classes_, f_names))
     with open(path + "samples/" + dataset + "/params.txt", "w") as g:
         g.write(" ".join(
             [str(max_idx), str(len(tf) * l + 2), str(f_size), str(w_size), str(max_l), str(f_len), str(w_len),
              str(w_count)]))
-    create_samples(indices, start, end, t_fields, t_words, f)
+    create_samples(indices, start, end, t_fields, t_words, f, tf)

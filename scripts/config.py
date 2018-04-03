@@ -14,6 +14,6 @@ if "nt" == os.name:
     path = "E:/Martin/PyCharm Projects/StructuredDataNLG/"
     data_path = path + "data/" + dataset
 else:
-    path = "/data/matulma4/StructuredDataNLG/"
-    data_path = "/data/matulma4/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
+    path = "/data/matulma4/diploma_thesis/StructuredDataNLG/"
+    data_path = "/data/matulma4/diploma_thesis/wikipedia-biography-dataset/wikipedia-biography-dataset/" + dataset
 

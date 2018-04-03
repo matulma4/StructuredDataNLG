@@ -27,7 +27,7 @@ def load_infoboxes(path, dataset):
             if i == limit:
                 break
     unique_keys = get_occurring(unique_keys, 10)
-    return result, unique_keys
+    return result, set(unique_keys)
 
 
 def load_sentences():
