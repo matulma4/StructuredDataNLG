@@ -1,6 +1,14 @@
+import inspect
+import os
 import pickle
 import re
+import sys
 from collections import Counter
+import time
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
 
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
@@ -11,7 +19,13 @@ from data_loader import load_sentences, load_infoboxes
 
 def get_words(sentences):
     vocabulary = get_most_frequent(sentences, True)
-    sents = replace_oov(sentences, set(vocabulary))
+    if os.path.exists(data_path + "/" + dataset + ".oov"):
+        sents = [line.strip().split(" ") for line in open(data_path + "/" + dataset + ".oov", encoding='utf-8')]
+    else:
+        sents = replace_oov(sentences, set(vocabulary))
+        with open(data_path + "/" + dataset + ".oov", "w", encoding='utf-8') as g:
+            for sent in sents:
+                g.write(" ".join(sent) + "\n")
     indices, encoder, max_idx = transform_to_indices(sents)
     return indices, encoder, max_idx
 
@@ -109,9 +123,12 @@ def process_infoboxes(unique_keys, dict_list, encoder):
             if word in classes:
                 table_w.add(word)
         table_fields.append(list(table_f))
-        table_words.append(encoder.transform(list(table_w)))
+        if len(table_w) == 0:
+            table_words.append([])
+        else:
+            table_words.append(encoder.transform(list(table_w)))
+            w_size = max(w_size, max(table_words[-1]))
         f_size = max(f_size, max(table_fields[-1]))
-        w_size = max(w_size, max(table_words[-1]))
         f_len = max(f_len, len(table_fields[-1]))
         w_len = max(w_len, len(table_words[-1]))
         w_count = max(w_count, len(field))
@@ -189,27 +206,42 @@ def create_samples(indices, start, end, t_f, t_w, fields, tf):
                 samplecount = 0
                 filecount += 1
 
-    pickle.dump((samples_context, samples_ls, samples_le, samples_gf, samples_gw, target),
-                            open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
+    pickle.dump((
+        np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
+        np.array(samples_gw), np.array(target)),
+        open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
 
 
 if __name__ == '__main__':
+    strt = time.time()
     dicts, u_keys = load_infoboxes(data_path, dataset)
     sentences = load_sentences()
+    print("Loading: " + str(time.time() - strt))
+    strt = time.time()
     f_size = 0
     w_size = 0
     f_len = 0
     w_len = 0
     w_count = 0
     indices, encoder, max_idx = get_words(sentences)
+    print("get_words: " + str(time.time() - strt))
+    strt = time.time()
     f, tf, t_fields, t_words, classes = process_infoboxes(u_keys, dicts, encoder)
+
+    print("process_infoboxes: " + str(time.time() - strt))
+    strt = time.time()
     print("Size of vocabulary: " + str(max_idx))
     start, end, max_l = local_conditioning(tf, f, sentences)
+    print("local_conditioning: " + str(time.time() - strt))
+    strt = time.time()
     print("Number of fields: " + str(max_l))
     sentences, f_names = delexicalize(sentences, dicts, classes, u_keys)
     output = np.concatenate((encoder.classes_, f_names))
+    print("delex: " + str(time.time() - strt))
+    strt = time.time()
     with open(path + "samples/" + dataset + "/params.txt", "w") as g:
         g.write(" ".join(
             [str(max_idx), str(len(tf) * l + 2), str(f_size), str(w_size), str(max_l), str(f_len), str(w_len),
              str(w_count)]))
     create_samples(indices, start, end, t_fields, t_words, f, tf)
+    print("samples: " + str(time.time() - strt))
