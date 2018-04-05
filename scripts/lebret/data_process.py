@@ -19,13 +19,13 @@ from data_loader import load_sentences, load_infoboxes
 
 def get_words(sentences):
     vocabulary = get_most_frequent(sentences, True)
-    if os.path.exists(data_path + "/" + dataset + ".oov"):
-        sents = [line.strip().split(" ") for line in open(data_path + "/" + dataset + ".oov", encoding='utf-8')]
-    else:
-        sents = replace_oov(sentences, set(vocabulary))
-        with open(data_path + "/" + dataset + ".oov", "w", encoding='utf-8') as g:
-            for sent in sents:
-                g.write(" ".join(sent) + "\n")
+    # if False:#os.path.exists(data_path + "/" + dataset + ".oov"):
+    #     sents = [line.strip().split(" ") for line in open(data_path + "/" + dataset + ".oov", encoding='utf-8')]
+    # else:
+    sents = replace_oov(sentences, set(vocabulary))
+        # with open(data_path + "/" + dataset + ".oov", "w", encoding='utf-8') as g:
+        #     for sent in sents:
+        #         g.write(" ".join(sent) + "\n")
     indices, encoder, max_word_idx = transform_to_indices(sents)
     return indices, encoder, max_word_idx
 
@@ -99,7 +99,7 @@ def process_infoboxes(unique_keys, dict_list, encoder):
     infoboxes = []
     u_k = list(unique_keys)
     le = LabelEncoder()
-    word_transform = dict(zip(u_k, le.fit_transform(u_k)))
+    field_transform = dict(zip(u_k, le.fit_transform(u_k)))
     table_fields = []
     table_words = []
     field_names = set(encoder.classes_)
@@ -115,12 +115,12 @@ def process_infoboxes(unique_keys, dict_list, encoder):
             idx = int(s[-1])
             word = r[key]
             if k in unique_keys:
-                table_f.add(word_transform[k])
+                table_f.add(field_transform[k])
 
                 if r[key] in field:
-                    field[word].append((word_transform[k], min(l, idx), max(1, l - idx + 1)))
+                    field[word].append((field_transform[k], min(l, idx), max(1, l - idx + 1)))
                 else:
-                    field[word] = [(word_transform[k], min(l, idx), max(1, l - idx + 1))]
+                    field[word] = [(field_transform[k], min(l, idx), max(1, l - idx + 1))]
             if word in field_names:
                 table_w.add(word)
         table_fields.append(list(table_f))
@@ -136,7 +136,7 @@ def process_infoboxes(unique_keys, dict_list, encoder):
         infoboxes.append(field)
     print("Maximum fields in table: " + str(f_len))
     print("Maximum words in table: " + str(w_len))
-    return infoboxes, word_transform, table_fields, table_words, field_names
+    return infoboxes, field_transform, table_fields, table_words, field_names
 
 
 def delexicalize(sentences, tables, vocabulary, keys):
@@ -162,7 +162,7 @@ def delexicalize(sentences, tables, vocabulary, keys):
     return list(field_names)
 
 
-def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes):
+def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform):
     path_to_files = path + "pickle/" + dataset
     pickle.dump(output, open(path_to_files + "/output.pickle", "wb"))
     pickle.dump(start, open(path_to_files + "/start.pickle", "wb"))
@@ -171,6 +171,8 @@ def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes):
     pickle.dump(t_fields, open(path_to_files + "/t_fields.pickle", "wb"))
     pickle.dump(t_words, open(path_to_files + "/t_words.pickle", "wb"))
     pickle.dump(infoboxes, open(path_to_files + "/infoboxes.pickle", "wb"))
+    pickle.dump(field_transform, open(path_to_files + "/field_tf.pickle", "wb"))
+    pickle.dump(word_transform, open(path_to_files + "/word_tf.pickle", "wb"))
 
 
 if __name__ == '__main__':
@@ -185,14 +187,15 @@ if __name__ == '__main__':
     w_len = 0
     w_count = 0
     indices, encoder, max_word_idx = get_words(sentences)
+    word_transform = dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))
     # print("get_words: " + str(time.time() - strt))
     # strt = time.time()
-    infoboxes, word_transform, t_fields, t_words, field_names = process_infoboxes(u_keys, dicts, encoder)
+    infoboxes, field_transform, t_fields, t_words, field_names = process_infoboxes(u_keys, dicts, encoder)
 
     # print("process_infoboxes: " + str(time.time() - strt))
     # strt = time.time()
     print("Size of vocabulary: " + str(max_word_idx))
-    start, end, loc_dim = local_conditioning(word_transform, infoboxes, sentences)
+    start, end, loc_dim = local_conditioning(field_transform, infoboxes, sentences)
     # print("local_conditioning: " + str(time.time() - strt))
     # strt = time.time()
     print("Number of fields: " + str(loc_dim))
@@ -202,8 +205,8 @@ if __name__ == '__main__':
     # strt = time.time()
     with open(path + "samples/" + dataset + "/params.txt", "w") as g:
         g.write(" ".join(
-            [str(max_word_idx), str(len(word_transform) * l + 2), str(f_size), str(w_size), str(loc_dim), str(f_len),
+            [str(max_word_idx), str(len(field_transform) * l + 2), str(f_size), str(w_size), str(loc_dim), str(f_len),
              str(w_len),
              str(w_count)]))
-    save_to_file(output, indices, start, end, t_fields, t_words, infoboxes)
+    save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform)
     # print("samples: " + str(time.time() - strt))
