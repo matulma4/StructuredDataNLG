@@ -1,10 +1,10 @@
 import inspect
 import os
-import pickle
 import re
 import sys
-from collections import Counter
+import pickle
 import time
+from collections import Counter
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -26,8 +26,8 @@ def get_words(sentences):
         with open(data_path + "/" + dataset + ".oov", "w", encoding='utf-8') as g:
             for sent in sents:
                 g.write(" ".join(sent) + "\n")
-    indices, encoder, max_idx = transform_to_indices(sents)
-    return indices, encoder, max_idx
+    indices, encoder, max_word_idx = transform_to_indices(sents)
+    return indices, encoder, max_word_idx
 
 
 def local_conditioning(tf, f, sentences):
@@ -35,6 +35,7 @@ def local_conditioning(tf, f, sentences):
     start = []
     end = []
     max_len = 0
+    # TODO fix indices from end
     for i in range(len(f)):
         ib = f[i]
         sent = sentences[i]
@@ -95,13 +96,13 @@ def get_most_frequent(all_sents, sub_numbers):
 
 def process_infoboxes(unique_keys, dict_list, encoder):
     global f_size, w_size, f_len, w_len, w_count
-    fields = []
+    infoboxes = []
     u_k = list(unique_keys)
     le = LabelEncoder()
-    tf = dict(zip(u_k, le.fit_transform(u_k)))
+    word_transform = dict(zip(u_k, le.fit_transform(u_k)))
     table_fields = []
     table_words = []
-    classes = set(encoder.classes_)
+    field_names = set(encoder.classes_)
     f_len = 0
     w_len = 0
     for r in dict_list:
@@ -114,13 +115,13 @@ def process_infoboxes(unique_keys, dict_list, encoder):
             idx = int(s[-1])
             word = r[key]
             if k in unique_keys:
-                table_f.add(tf[k])
+                table_f.add(word_transform[k])
 
                 if r[key] in field:
-                    field[word].append((tf[k], min(l, idx), max(1, l - idx + 1)))
+                    field[word].append((word_transform[k], min(l, idx), max(1, l - idx + 1)))
                 else:
-                    field[word] = [(tf[k], min(l, idx), max(1, l - idx + 1))]
-            if word in classes:
+                    field[word] = [(word_transform[k], min(l, idx), max(1, l - idx + 1))]
+            if word in field_names:
                 table_w.add(word)
         table_fields.append(list(table_f))
         if len(table_w) == 0:
@@ -132,14 +133,15 @@ def process_infoboxes(unique_keys, dict_list, encoder):
         f_len = max(f_len, len(table_fields[-1]))
         w_len = max(w_len, len(table_words[-1]))
         w_count = max(w_count, len(field))
-        fields.append(field)
+        infoboxes.append(field)
     print("Maximum fields in table: " + str(f_len))
     print("Maximum words in table: " + str(w_len))
-    return fields, tf, table_fields, table_words, classes
+    return infoboxes, word_transform, table_fields, table_words, field_names
 
 
 def delexicalize(sentences, tables, vocabulary, keys):
     field_names = set()
+    g = open(data_path + "/" + dataset + ".dlx", "w", encoding="utf-8")
     for i in range(len(sentences)):
         table = tables[i]
         sentence = sentences[i]
@@ -155,93 +157,53 @@ def delexicalize(sentences, tables, vocabulary, keys):
                         else:
                             field_names.add("<UNK>")
                         break
-    return sentences, list(field_names)
+        g.write(" ".join(sentence) + "\n")
+    g.close()
+    return list(field_names)
 
 
-# TODO make create_one_sample method
-# TODO make global conditioning more effective
-def create_samples(indices, start, end, t_f, t_w, fields, tf):
-    samples_context = []
-    samples_ls = []
-    samples_le = []
-    samples_gf = []
-    samples_gw = []
-    samples_mix = []
-    target = []
-    filecount = 0
-    samplecount = 0
-    for i in range(len(indices)):
-        idx = indices[i]
-        s = start[i]
-        e = end[i]
-        glob_field = np.pad(t_f[i], (0, f_len - len(t_f[i])), mode='constant')
-        glob_word = np.pad(t_w[i], (0, w_len - len(t_w[i])), mode='constant')
-        field = fields[i]
-        for j in range(l, len(idx)):
-            context = idx[j - l:j]
-            s_context = np.array([np.pad(ss, (0, max_l - len(ss)), mode='constant') for ss in s[j - l:j]])
-            e_context = np.array([np.pad(ee, (0, max_l - len(ee)), mode='constant') for ee in e[j - l:j]])
-            samples_context.append(context)
-            samples_ls.append(s_context)
-            samples_le.append(e_context)
-            samples_gf.append(glob_field)
-            samples_gw.append(glob_word)
-            t = np.zeros(len(output) + 1)
-            try:
-                xx = np.where(output == sentences[i][j])
-                t[xx[0][0]] = 1.0
-            except IndexError:
-                t[-1] = 1.0
-            target.append(t)
-            samplecount += 1
-            if samplecount == sample_limit:
-                pickle.dump((np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf), np.array(samples_gw), np.array(target)),
-                open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
-                samples_context = []
-                samples_ls = []
-                samples_le = []
-                samples_gf = []
-                samples_gw = []
-                target = []
-                samplecount = 0
-                filecount += 1
-
-    pickle.dump((
-        np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
-        np.array(samples_gw), np.array(target)),
-        open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
+def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes):
+    path_to_files = path + "pickle/" + dataset
+    pickle.dump(output, open(path_to_files + "/output.pickle", "wb"))
+    pickle.dump(start, open(path_to_files + "/start.pickle", "wb"))
+    pickle.dump(end, open(path_to_files + "/end.pickle", "wb"))
+    pickle.dump(indices, open(path_to_files + "/indices.pickle", "wb"))
+    pickle.dump(t_fields, open(path_to_files + "/t_fields.pickle", "wb"))
+    pickle.dump(t_words, open(path_to_files + "/t_words.pickle", "wb"))
+    pickle.dump(infoboxes, open(path_to_files + "/infoboxes.pickle", "wb"))
 
 
 if __name__ == '__main__':
-    strt = time.time()
+    # strt = time.time()
     dicts, u_keys = load_infoboxes(data_path, dataset)
     sentences = load_sentences()
-    print("Loading: " + str(time.time() - strt))
-    strt = time.time()
+    # print("Loading: " + str(time.time() - strt))
+    # strt = time.time()
     f_size = 0
     w_size = 0
     f_len = 0
     w_len = 0
     w_count = 0
-    indices, encoder, max_idx = get_words(sentences)
-    print("get_words: " + str(time.time() - strt))
-    strt = time.time()
-    f, tf, t_fields, t_words, classes = process_infoboxes(u_keys, dicts, encoder)
+    indices, encoder, max_word_idx = get_words(sentences)
+    # print("get_words: " + str(time.time() - strt))
+    # strt = time.time()
+    infoboxes, word_transform, t_fields, t_words, field_names = process_infoboxes(u_keys, dicts, encoder)
 
-    print("process_infoboxes: " + str(time.time() - strt))
-    strt = time.time()
-    print("Size of vocabulary: " + str(max_idx))
-    start, end, max_l = local_conditioning(tf, f, sentences)
-    print("local_conditioning: " + str(time.time() - strt))
-    strt = time.time()
-    print("Number of fields: " + str(max_l))
-    sentences, f_names = delexicalize(sentences, dicts, classes, u_keys)
+    # print("process_infoboxes: " + str(time.time() - strt))
+    # strt = time.time()
+    print("Size of vocabulary: " + str(max_word_idx))
+    start, end, loc_dim = local_conditioning(word_transform, infoboxes, sentences)
+    # print("local_conditioning: " + str(time.time() - strt))
+    # strt = time.time()
+    print("Number of fields: " + str(loc_dim))
+    f_names = delexicalize(sentences, dicts, field_names, u_keys)
     output = np.concatenate((encoder.classes_, f_names))
-    print("delex: " + str(time.time() - strt))
-    strt = time.time()
+    # print("delex: " + str(time.time() - strt))
+    # strt = time.time()
     with open(path + "samples/" + dataset + "/params.txt", "w") as g:
         g.write(" ".join(
-            [str(max_idx), str(len(tf) * l + 2), str(f_size), str(w_size), str(max_l), str(f_len), str(w_len),
+            [str(max_word_idx), str(len(word_transform) * l + 2), str(f_size), str(w_size), str(loc_dim), str(f_len),
+             str(w_len),
              str(w_count)]))
-    create_samples(indices, start, end, t_fields, t_words, f, tf)
-    print("samples: " + str(time.time() - strt))
+    save_to_file(output, indices, start, end, t_fields, t_words, infoboxes)
+    # print("samples: " + str(time.time() - strt))
