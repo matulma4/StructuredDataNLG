@@ -1,8 +1,15 @@
+import inspect
+
 import keras.backend as K
 import numpy as np
 import pickle
-from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation, add, dot
+import sys
+from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation
 from keras.models import Model
+import os
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
 
 from config import *
 
@@ -51,7 +58,13 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     return model
 
 
-# TODO make create_one_sample method
+def create_one_sample(idx, s, e, j, max_l):
+    context = idx[j - l:j]
+    s_context = np.array([np.pad(ss, (0, max_l - len(ss)), mode='constant') for ss in s[j - l:j]])
+    e_context = np.array([np.pad(ee, (0, max_l - len(ee)), mode='constant') for ee in e[j - l:j]])
+    return context, e_context, s_context
+
+
 # TODO make global conditioning more effective
 def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentences):
     samples_context = []
@@ -61,7 +74,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
     samples_gw = []
     samples_mix = []
     target = []
-    filecount = 0
+    # filecount = 0
     samplecount = 0
     for i in range(len(indices)):
         idx = indices[i]
@@ -76,9 +89,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         #     mix_sample.append(np.pad(vt, (0, max_l - vt.shape[0]), mode='constant'))
         # mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
         for j in range(l, len(idx)):
-            context = idx[j - l:j]
-            s_context = np.array([np.pad(ss, (0, max_l - len(ss)), mode='constant') for ss in s[j - l:j]])
-            e_context = np.array([np.pad(ee, (0, max_l - len(ee)), mode='constant') for ee in e[j - l:j]])
+            context, s_context, e_context = create_one_sample(idx, s, e, j, max_l)
             samples_context.append(context)
             samples_ls.append(s_context)
             samples_le.append(e_context)
@@ -94,10 +105,13 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             target.append(t)
             samplecount += 1
             if samplecount == sample_limit:
-                pickle.dump((
-                    np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
-                    np.array(samples_gw), np.array(samples_mix), np.array(target)),
-                    open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
+                model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
+                                      'gf_input': np.array(samples_gf),
+                                      'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
+                # pickle.dump((
+                #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
+                #     np.array(samples_gw), np.array(samples_mix), np.array(target)),
+                #     open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
                 samples_context = []
                 samples_ls = []
                 samples_le = []
@@ -106,12 +120,12 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                 samples_mix = []
                 target = []
                 samplecount = 0
-                filecount += 1
-
-    pickle.dump((
-        np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
-        np.array(samples_gw), np.array(samples_mix), np.array(target)),
-        open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
+                # filecount += 1
+    model.save(path + "models/model.h5")
+    # pickle.dump((
+    #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
+    #     np.array(samples_gw), np.array(samples_mix), np.array(target)),
+    #     open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
 
 
 def load_from_file():
@@ -135,12 +149,11 @@ if __name__ == '__main__':
                                                                                          f.read().split()]
 
     indices, start, end, t_fields, t_words, infoboxes, output, sentences = load_from_file()
+    V = output.shape[0]+1
+    model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
     create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
 
-    samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = pickle.load(
-        open(path + "samples/" + dataset + "/samples_0.pickle", "rb"))
-    V = target.shape[1]
-    model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
-    model.fit({'c_input': samples_context, 'ls_input': samples_ls, 'le_input': samples_le,
-               'gf_input': samples_gf,
-               'gw_input': samples_gw}, {'activation': target}, batch_size=32)
+    # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = pickle.load(
+    #     open(path + "samples/" + dataset + "/samples_0.pickle", "rb"))
+    # V = target.shape[1]
+
