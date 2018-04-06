@@ -121,7 +121,6 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                 target = []
                 samplecount = 0
                 # filecount += 1
-    model.save(path + "models/model.h5")
     # pickle.dump((
     #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
     #     np.array(samples_gw), np.array(samples_mix), np.array(target)),
@@ -143,6 +142,7 @@ def load_from_file():
 
 
 if __name__ == '__main__':
+    n_iter = 10
     global V
     with open(path + "samples/" + dataset + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
@@ -151,7 +151,9 @@ if __name__ == '__main__':
     indices, start, end, t_fields, t_words, infoboxes, output, sentences = load_from_file()
     V = output.shape[0]+1
     model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
-    create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
+    for it in range(n_iter):
+        create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
+    model.save(path + "models/" + dataset + "/model_" + str(iter) + ".h5")
 
     # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = pickle.load(
     #     open(path + "samples/" + dataset + "/samples_0.pickle", "rb"))
