@@ -58,10 +58,10 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     return model
 
 
-def create_one_sample(idx, s, e, j, max_l):
-    context = idx[j - l:j]
-    s_context = np.array([np.pad(ss, (0, max_l - len(ss)), mode='constant') for ss in s[j - l:j]])
-    e_context = np.array([np.pad(ee, (0, max_l - len(ee)), mode='constant') for ee in e[j - l:j]])
+def create_one_sample(idx, s, e, bi, ei, max_l):
+    context = idx[bi:ei]
+    s_context = np.array([np.pad(ss, (0, max_l - len(ss)), mode='constant') for ss in s[bi:ei]])
+    e_context = np.array([np.pad(ee, (0, max_l - len(ee)), mode='constant') for ee in e[bi:ei]])
     return context, e_context, s_context
 
 
@@ -89,7 +89,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         #     mix_sample.append(np.pad(vt, (0, max_l - vt.shape[0]), mode='constant'))
         # mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
         for j in range(l, len(idx)):
-            context, s_context, e_context = create_one_sample(idx, s, e, j, max_l)
+            context, s_context, e_context = create_one_sample(idx, s, e, j-l, j, max_l)
             samples_context.append(context)
             samples_ls.append(s_context)
             samples_le.append(e_context)
@@ -153,7 +153,7 @@ if __name__ == '__main__':
     model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
     for it in range(n_iter):
         create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
-    model.save(path + "models/" + dataset + "/model_" + str(iter) + ".h5")
+    model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
 
     # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = pickle.load(
     #     open(path + "samples/" + dataset + "/samples_0.pickle", "rb"))
