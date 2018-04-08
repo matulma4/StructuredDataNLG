@@ -102,7 +102,7 @@ def process_infoboxes(unique_keys, dict_list, encoder):
     field_transform = dict(zip(u_k, le.fit_transform(u_k)))
     table_fields = []
     table_words = []
-    field_names = set(encoder.classes_)
+    field_values = set(encoder.classes_)
     f_len = 0
     w_len = 0
     for r in dict_list:
@@ -121,7 +121,7 @@ def process_infoboxes(unique_keys, dict_list, encoder):
                     field[word].append((field_transform[k], min(l, idx), max(1, l - idx + 1)))
                 else:
                     field[word] = [(field_transform[k], min(l, idx), max(1, l - idx + 1))]
-            if word in field_names:
+            if word in field_values:
                 table_w.add(word)
         table_fields.append(list(table_f))
         if len(table_w) == 0:
@@ -136,7 +136,7 @@ def process_infoboxes(unique_keys, dict_list, encoder):
         infoboxes.append(field)
     print("Maximum fields in table: " + str(f_len))
     print("Maximum words in table: " + str(w_len))
-    return infoboxes, field_transform, table_fields, table_words, field_names
+    return infoboxes, field_transform, table_fields, table_words, field_values
 
 
 def delexicalize(sentences, tables, vocabulary, keys):
@@ -190,7 +190,7 @@ if __name__ == '__main__':
     word_transform = dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))
     # print("get_words: " + str(time.time() - strt))
     # strt = time.time()
-    infoboxes, field_transform, t_fields, t_words, field_names = process_infoboxes(u_keys, dicts, encoder)
+    infoboxes, field_transform, t_fields, t_words, field_values = process_infoboxes(u_keys, dicts, encoder)
 
     # print("process_infoboxes: " + str(time.time() - strt))
     # strt = time.time()
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     # print("local_conditioning: " + str(time.time() - strt))
     # strt = time.time()
     print("Number of fields: " + str(loc_dim))
-    f_names = delexicalize(sentences, dicts, field_names, u_keys)
+    f_names = delexicalize(sentences, dicts, field_values, u_keys)
     output = np.concatenate((encoder.classes_, f_names))
     # print("delex: " + str(time.time() - strt))
     # strt = time.time()
