@@ -20,16 +20,16 @@ def get_n_best(ls, n):
     return arr.argsort()[-n:][::-1]
 
 
-def load_from_file(test_set):
+def load_from_file(test_set, model_name):
     path_to_files = path + "pickle/" + dataset
     output = np.append(pickle.load(open(path_to_files + "/output.pickle", "rb")), "<UNK>")
     # t_fields = pickle.load(open(path_to_files + "/t_fields.pickle", "rb"))
     # t_words = pickle.load(open(path_to_files + "/t_words.pickle", "rb"))
     # infoboxes = pickle.load(open(path_to_test + "/infoboxes.pickle", "rb"))
-    infoboxes, u_keys = load_infoboxes(data_path + test_set, test_set)
+    infoboxes, u_keys = load_infoboxes(test_path + test_set, test_set)
     field_transform = pickle.load(open(path_to_files + "/field_tf.pickle", "rb"))
     word_transform = pickle.load(open(path_to_files + "/word_tf.pickle", "rb"))
-    model = load_model(path + "models/" + dataset + "/model_1.h5")
+    model = load_model(path + "models/" + dataset + "/" + model_name + ".h5")
     return infoboxes, output, model, field_transform, word_transform
 
 
@@ -116,7 +116,8 @@ def test_model(model, infoboxes, f_tf, w_tf, output):
 
 
 if __name__ == '__main__':
-    infoboxes, output, model, field_transform, word_transform = load_from_file("test")
+    m_name = sys.argv[1]
+    infoboxes, output, model, field_transform, word_transform = load_from_file("test", m_name)
     with open(path + "samples/" + dataset + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
