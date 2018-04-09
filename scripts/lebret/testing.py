@@ -26,7 +26,7 @@ def load_from_file(test_set):
     # t_fields = pickle.load(open(path_to_files + "/t_fields.pickle", "rb"))
     # t_words = pickle.load(open(path_to_files + "/t_words.pickle", "rb"))
     # infoboxes = pickle.load(open(path_to_test + "/infoboxes.pickle", "rb"))
-    infoboxes, u_keys = load_infoboxes(path + "data/" + test_set, test_set)
+    infoboxes, u_keys = load_infoboxes(data_path + test_set, test_set)
     field_transform = pickle.load(open(path_to_files + "/field_tf.pickle", "rb"))
     word_transform = pickle.load(open(path_to_files + "/word_tf.pickle", "rb"))
     model = load_model(path + "models/" + dataset + "/model_1.h5")
