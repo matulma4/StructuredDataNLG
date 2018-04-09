@@ -59,7 +59,7 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
 
 
 def create_one_sample(idx, s, e, bi, ei, max_l):
-    context = idx[bi:ei]
+    context = np.array(idx[bi:ei])
     s_context = np.array([np.pad(ss, (0, max_l - len(ss)), mode='constant') for ss in s[bi:ei]])
     e_context = np.array([np.pad(ee, (0, max_l - len(ee)), mode='constant') for ee in e[bi:ei]])
     return context, e_context, s_context

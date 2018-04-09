@@ -5,7 +5,6 @@ import sys
 import numpy as np
 import pickle
 from keras.models import load_model
-from odo.backends.dask import bag_to_iterator
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -23,7 +22,7 @@ def get_n_best(ls, n):
 
 def load_from_file(test_set):
     path_to_files = path + "pickle/" + dataset
-    output = pickle.load(open(path_to_files + "/output.pickle", "rb"))
+    output = np.append(pickle.load(open(path_to_files + "/output.pickle", "rb")), "<UNK>")
     # t_fields = pickle.load(open(path_to_files + "/t_fields.pickle", "rb"))
     # t_words = pickle.load(open(path_to_files + "/t_words.pickle", "rb"))
     # infoboxes = pickle.load(open(path_to_test + "/infoboxes.pickle", "rb"))
@@ -88,23 +87,32 @@ def beam_search(model, size, sent_length, n, output, word_tf, gf, gw, infobox):
                  'le_input': np.array(samples_le),
                  'gf_input': np.array(gf),
                  'gw_input': np.array(gw)})
-            best_pred = get_n_best(prediction[0], n)
+            best_pred = get_n_best(prediction[0], prediction.shape[1])
             for p in best_pred:
                 score = prediction[0][p]
-                s = Sample(b.score * score * 100, b.sentence + [output[p]], b.indexes, word_tf, b.starts, b.ends, infobox)
+                s = Sample(b.score * score * 100, b.sentence + [output[p]], b.indexes, word_tf, b.starts, b.ends,
+                           infobox)
                 new_beam.append(s)
         new_score = [nb.score for nb in new_beam]
         best_scores = get_n_best(new_score, size)
         beam = [new_beam[bs] for bs in best_scores]
+        for b in beam:
+            print(b.sentence)
+        print("=======================================")
 
 
 def test_model(model, infoboxes, f_tf, w_tf, output):
     t_fields, t_words, ib = process_infoboxes(infoboxes, f_tf, w_tf)
     i = 0
-    gf = [np.pad(t_fields[i], (0, f_len - len(t_fields[i])), mode='constant')]
-    gw = [np.pad(t_words[i], (0, w_len - len(t_words[i])), mode='constant')]
-    print(beam_search(model, 10, 30+l, 5, output, w_tf, gf, gw, infoboxes[0]))
-    pass
+    if f_len >= len(t_fields[i]):
+        gf = [np.pad(t_fields[i], (0, f_len - len(t_fields[i])), mode='constant')]
+    else:
+        gf = np.array(t_fields[i][:f_len])
+    if w_len >= len(t_words[i]):
+        gw = [np.pad(t_words[i], (0, w_len - len(t_words[i])), mode='constant')]
+    else:
+        gw = np.array(t_words[i][:w_len])
+    print(beam_search(model, 10, 30 + l, 5, output, w_tf, gf, gw, ib[i])[l + 1:])
 
 
 if __name__ == '__main__':
