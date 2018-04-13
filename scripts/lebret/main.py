@@ -98,7 +98,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             # samples_mix.append(mix_sample)
             t = np.zeros(len(output) + 1)
             try:
-                xx = np.where(output == sentences[i][j])
+                xx = np.where(output == sentences[i][j-l])
                 t[xx[0][0]] = 1.0
             except IndexError:
                 t[-1] = 1.0
@@ -120,6 +120,10 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                 samples_mix = []
                 target = []
                 samplecount = 0
+
+    model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
+                          'gf_input': np.array(samples_gf),
+                          'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
                 # filecount += 1
     # pickle.dump((
     #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
@@ -144,7 +148,7 @@ def load_from_file():
 if __name__ == '__main__':
     n_iter = 10
     global V
-    with open(path + "samples/" + dataset + "/params.txt") as f:
+    with open(path + "pickle/" + dataset + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
 
