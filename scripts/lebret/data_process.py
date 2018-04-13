@@ -203,10 +203,10 @@ if __name__ == '__main__':
     output = np.concatenate((encoder.classes_, f_names))
     # print("delex: " + str(time.time() - strt))
     # strt = time.time()
-    with open(path + "samples/" + dataset + "/params.txt", "w") as g:
+    save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform)
+    with open(path + "pickle/" + dataset + "/params.txt", "w") as g:
         g.write(" ".join(
             [str(max_word_idx), str(len(field_transform) * l + 2), str(f_size), str(w_size), str(loc_dim), str(f_len),
              str(w_len),
              str(w_count)]))
-    save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform)
     # print("samples: " + str(time.time() - strt))
