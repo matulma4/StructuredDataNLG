@@ -26,7 +26,7 @@ def load_infoboxes(path, dataset):
             i += 1
             if i == limit:
                 break
-    unique_keys = get_occurring(unique_keys, 10)
+    unique_keys = get_occurring(unique_keys, min_keys)
     return result, set(unique_keys)
 
 
