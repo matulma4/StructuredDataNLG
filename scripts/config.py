@@ -8,12 +8,13 @@ g = 128
 n = 11
 V = 20000
 nhu = 256
+min_keys = 100
 
 dataset = "valid"
 if "nt" == os.name:
     path = "E:/Martin/PyCharm Projects/StructuredDataNLG/"
     data_path = path + "data/" + dataset
-    test_path = data_path
+    test_path = path + "data/"
 else:
     path = "/data/matulma4/diploma_thesis/StructuredDataNLG/"
     test_path = "/data/matulma4/diploma_thesis/wikipedia-biography-dataset/wikipedia-biography-dataset/"
