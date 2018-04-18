@@ -53,7 +53,10 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
 
     mix_input = Input(shape=(w_count, loc_dim,), name='mix_input')
     # loc_dim: number of fields x number of positions
-    merged = concatenate(emb_list)
+    if global_cond or local_cond:
+        merged = concatenate(emb_list)
+    else:
+        merged = emb_list[0]
 
     first = Dense(units=nhu, activation='tanh', input_dim=emb_dim)(merged)  # h(x), 256
     second = Dense(units=V, name='second')(first)  # 20000
@@ -94,9 +97,10 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         idx = indices[i]
         s = start[i]
         e = end[i]
-        glob_field = np.pad(t_f[i], (0, f_len - len(t_f[i])), mode='constant')
-        glob_word = np.pad(t_w[i], (0, w_len - len(t_w[i])), mode='constant')
-        field = fields[i]
+        if global_cond:
+            glob_field = np.pad(t_f[i], (0, f_len - len(t_f[i])), mode='constant')
+            glob_word = np.pad(t_w[i], (0, w_len - len(t_w[i])), mode='constant')
+        # field = fields[i]
         # mix_sample = []
         # for t_key in field:
         #     vt = np.unique([tv[0] * l + tv[1] for tv in field[t_key]])
@@ -105,10 +109,12 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         for j in range(l, len(idx)):
             context, s_context, e_context = create_one_sample(idx, s, e, j-l, j, max_l)
             samples_context.append(context)
-            samples_ls.append(s_context)
-            samples_le.append(e_context)
-            samples_gf.append(glob_field)
-            samples_gw.append(glob_word)
+            if local_cond:
+                samples_ls.append(s_context)
+                samples_le.append(e_context)
+            if global_cond:
+                samples_gf.append(glob_field)
+                samples_gw.append(glob_word)
             # samples_mix.append(mix_sample)
             t = np.zeros(len(output) + 1)
             try:
@@ -119,15 +125,16 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             target.append(t)
             samplecount += 1
             if samplecount == sample_limit:
+                input_ls = {'c_input': np.array(samples_context)}
+                if local_cond:
+                    input_ls['ls_input'] = np.array(samples_ls)
+                    input_ls['le_input'] = np.array(samples_le)
+                if global_cond:
+                    input_ls['gf_input'] = np.array(samples_gf)
+                    input_ls['gw_input'] = np.array(samples_gw)
+
                 for it in range(n_iter):
-                    # print("Training epoch " + str(it) + " on " + str(samplecount) + " samples")
-                    loss = model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
-                                          'gf_input': np.array(samples_gf),
-                                          'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
-                # pickle.dump((
-                #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
-                #     np.array(samples_gw), np.array(samples_mix), np.array(target)),
-                #     open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
+                    loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
                     print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss))
                 samples_context = []
                 samples_ls = []
@@ -143,11 +150,6 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                               'gf_input': np.array(samples_gf),
                               'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
         print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss))
-                # filecount += 1
-    # pickle.dump((
-    #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
-    #     np.array(samples_gw), np.array(samples_mix), np.array(target)),
-    #     open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
 
 
 def load_from_file():

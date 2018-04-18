@@ -1,6 +1,6 @@
 import os
 
-limit = 500
+limit = 1
 sample_limit = 1000
 l = 10
 d = 64
@@ -8,7 +8,10 @@ g = 128
 n = 11
 V = 20000
 nhu = 256
-min_keys = 100
+min_keys = 1
+
+global_cond = True
+local_cond = True
 
 dataset = "valid"
 if "nt" == os.name:
