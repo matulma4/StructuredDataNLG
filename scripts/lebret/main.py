@@ -7,6 +7,9 @@ import sys
 from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation
 from keras.models import Model
 import os
+
+from keras.optimizers import SGD
+
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
@@ -54,7 +57,8 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     activate = Activation('softmax', name='activation')(second)
 
     model = Model(inputs=[c_input, ls_input, le_input, gf_input, gv_input], outputs=activate)
-    model.compile(optimizer='sgd', loss='categorical_crossentropy')
+    optim = SGD(lr=1)
+    model.compile(optimizer=optim, loss='categorical_crossentropy')
     return model
 
 
@@ -105,13 +109,16 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             target.append(t)
             samplecount += 1
             if samplecount == sample_limit:
-                model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
-                                      'gf_input': np.array(samples_gf),
-                                      'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
+                for it in range(n_iter):
+                    # print("Training epoch " + str(it) + " on " + str(samplecount) + " samples")
+                    loss = model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
+                                          'gf_input': np.array(samples_gf),
+                                          'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
                 # pickle.dump((
                 #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
                 #     np.array(samples_gw), np.array(samples_mix), np.array(target)),
                 #     open(path + "samples/" + dataset + "/samples_" + str(filecount) + ".pickle", "wb"))
+                    print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss))
                 samples_context = []
                 samples_ls = []
                 samples_le = []
@@ -121,9 +128,11 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                 target = []
                 samplecount = 0
 
-    model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
-                          'gf_input': np.array(samples_gf),
-                          'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
+    for it in range(n_iter):
+        loss = model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
+                              'gf_input': np.array(samples_gf),
+                              'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
+        print("Training loss: " + str(loss))
                 # filecount += 1
     # pickle.dump((
     #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
@@ -155,8 +164,8 @@ if __name__ == '__main__':
     indices, start, end, t_fields, t_words, infoboxes, output, sentences = load_from_file()
     V = output.shape[0]+1
     model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
-    for it in range(n_iter):
-        create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
+    # for it in range(n_iter):
+    create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
     model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
 
     # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = pickle.load(
