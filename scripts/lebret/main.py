@@ -20,32 +20,42 @@ from config import *
 def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_field_idx, max_glob_word_idx):
     c_input = Input(shape=(l,), name='c_input')
 
-    ls_input = Input(shape=(l, loc_dim,), name='ls_input')
-    le_input = Input(shape=(l, loc_dim,), name='le_input')
-
-    gf_input = Input(shape=(glob_field_dim,), name='gf_input')
-    gv_input = Input(shape=(glob_word_dim,), name='gw_input')
-
-    mix_input = Input(shape=(w_count, loc_dim,), name='mix_input')
-
     context = Embedding(input_dim=V, output_dim=d, input_length=l)(c_input)
     flat_context = Flatten()(context)
 
+    emb_list = [flat_context]
+    input_list = [c_input]
+    emb_dim = l * d
+
+    if local_cond:
+        ls_input = Input(shape=(l, loc_dim,), name='ls_input')
+        le_input = Input(shape=(l, loc_dim,), name='le_input')
+        local_start = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=l, mask_zero=True)(ls_input)
+        local_end = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=l, mask_zero=True)(le_input)
+        ls_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_start)
+        le_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_end)
+        flat_ls = Flatten(input_shape=(l, d))(ls_lambda)
+        flat_le = Flatten(input_shape=(l, d))(le_lambda)
+        emb_list += [flat_ls, flat_le]
+        input_list += [ls_input, le_input]
+        emb_dim += 2 * l * d
+
+    if global_cond:
+        gf_input = Input(shape=(glob_field_dim,), name='gf_input')
+        gv_input = Input(shape=(glob_word_dim,), name='gw_input')
+        global_field = Embedding(input_dim=max_glob_field_idx, output_dim=g, input_length=l, mask_zero=True)(gf_input)
+        global_value = Embedding(input_dim=max_glob_word_idx, output_dim=g, input_length=l, mask_zero=True)(gv_input)
+        gf_lambda = Lambda(lambda x: K.max(x, axis=1))(global_field)
+        gv_lambda = Lambda(lambda x: K.max(x, axis=1))(global_value)
+        emb_list += [gf_lambda, gv_lambda]
+        input_list += [gf_input, gv_input]
+        emb_dim += 2 * g
+
+    mix_input = Input(shape=(w_count, loc_dim,), name='mix_input')
     # loc_dim: number of fields x number of positions
-    local_start = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=l, mask_zero=True)(ls_input)
-    local_end = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=l, mask_zero=True)(le_input)
-    ls_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_start)
-    le_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_end)
-    flat_ls = Flatten(input_shape=(l, d))(ls_lambda)
-    flat_le = Flatten(input_shape=(l, d))(le_lambda)
-    global_field = Embedding(input_dim=max_glob_field_idx, output_dim=g, input_length=l, mask_zero=True)(gf_input)
-    global_value = Embedding(input_dim=max_glob_word_idx, output_dim=g, input_length=l, mask_zero=True)(gv_input)
-    gf_lambda = Lambda(lambda x: K.max(x, axis=1))(global_field)
-    gv_lambda = Lambda(lambda x: K.max(x, axis=1))(global_value)
+    merged = concatenate(emb_list)
 
-    merged = concatenate([flat_context, flat_ls, flat_le, gf_lambda, gv_lambda])
-
-    first = Dense(units=nhu, activation='tanh', input_dim=3 * l * d + 2 * g)(merged)  # h(x), 256
+    first = Dense(units=nhu, activation='tanh', input_dim=emb_dim)(merged)  # h(x), 256
     second = Dense(units=V, name='second')(first)  # 20000
 
     # Mixing outputs
@@ -56,9 +66,9 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     # final = add([second, dot_prod])
     activate = Activation('softmax', name='activation')(second)
 
-    model = Model(inputs=[c_input, ls_input, le_input, gf_input, gv_input], outputs=activate)
-    optim = SGD(lr=1)
-    model.compile(optimizer=optim, loss='categorical_crossentropy')
+    model = Model(inputs=input_list, outputs=activate)
+    optimizer = SGD(lr=1)
+    model.compile(optimizer=optimizer, loss='categorical_crossentropy')
     return model
 
 
@@ -132,7 +142,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         loss = model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
                               'gf_input': np.array(samples_gf),
                               'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
-        print("Training loss: " + str(loss))
+        print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss))
                 # filecount += 1
     # pickle.dump((
     #     np.array(samples_context), np.array(samples_ls), np.array(samples_le), np.array(samples_gf),
@@ -155,7 +165,7 @@ def load_from_file():
 
 
 if __name__ == '__main__':
-    n_iter = 10
+    n_iter = 100
     global V
     with open(path + "pickle/" + dataset + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
