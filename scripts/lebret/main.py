@@ -19,8 +19,12 @@ from config import *
 
 def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_field_idx, max_glob_word_idx):
     c_input = Input(shape=(l,), name='c_input')
-
-    context = Embedding(input_dim=V, output_dim=d, input_length=l)(c_input)
+    if use_ft:
+        path_to_files = path + "pickle/" + dataset
+        vectors = pickle.load(open(path_to_files + "/vectors.pickle", "wb"))
+        context = Embedding(input_dim=V, output_dim=d, input_length=l, weights=vectors)(c_input)
+    else:
+        context = Embedding(input_dim=V, output_dim=d, input_length=l)(c_input)
     flat_context = Flatten()(context)
 
     emb_list = [flat_context]
@@ -70,7 +74,7 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     activate = Activation('softmax', name='activation')(second)
 
     model = Model(inputs=input_list, outputs=activate)
-    optimizer = SGD(lr=1)
+    optimizer = SGD(lr=1, decay=1e-5)
     model.compile(optimizer=optimizer, loss='categorical_crossentropy')
     return model
 
@@ -93,6 +97,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
     target = []
     # filecount = 0
     samplecount = 0
+    lr = model.optimizer.lr
     for i in range(len(indices)):
         idx = indices[i]
         s = start[i]
@@ -135,7 +140,8 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
 
                 for it in range(n_iter):
                     loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
-                    print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss))
+                    lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
+                    print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)))
                 samples_context = []
                 samples_ls = []
                 samples_le = []
@@ -145,11 +151,18 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                 target = []
                 samplecount = 0
 
+    input_ls = {'c_input': np.array(samples_context)}
+    if local_cond:
+        input_ls['ls_input'] = np.array(samples_ls)
+        input_ls['le_input'] = np.array(samples_le)
+    if global_cond:
+        input_ls['gf_input'] = np.array(samples_gf)
+        input_ls['gw_input'] = np.array(samples_gw)
+
     for it in range(n_iter):
-        loss = model.train_on_batch({'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls), 'le_input': np.array(samples_le),
-                              'gf_input': np.array(samples_gf),
-                              'gw_input': np.array(samples_gw)}, {'activation': np.array(target)})
-        print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss))
+        loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
+        lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
+        print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)))
 
 
 def load_from_file():
@@ -167,7 +180,7 @@ def load_from_file():
 
 
 if __name__ == '__main__':
-    n_iter = 100
+    n_iter = 10
     global V
     with open(path + "pickle/" + dataset + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
