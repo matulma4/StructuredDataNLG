@@ -5,7 +5,7 @@ import sys
 import pickle
 import time
 from collections import Counter
-
+import fastText.FastText as ft
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
@@ -19,6 +19,11 @@ from data_loader import load_sentences, load_infoboxes
 
 def get_words(sentences):
     vocabulary = get_most_frequent(sentences, True)
+    if use_ft:
+        ft_model = ft.load_model(data_path + "/" + dataset + "_vectors.bin")
+        ft_vectors = np.array([ft_model.get_word_vector(v) for v in vocabulary])
+    else:
+        ft_vectors = None
     # if False:#os.path.exists(data_path + "/" + dataset + ".oov"):
     #     sents = [line.strip().split(" ") for line in open(data_path + "/" + dataset + ".oov", encoding='utf-8')]
     # else:
@@ -27,7 +32,7 @@ def get_words(sentences):
         #     for sent in sents:
         #         g.write(" ".join(sent) + "\n")
     indices, encoder, max_word_idx = transform_to_indices(sents)
-    return indices, encoder, max_word_idx
+    return indices, encoder, max_word_idx, ft_vectors
 
 
 def local_conditioning(tf, f, sentences):
@@ -129,7 +134,13 @@ def process_infoboxes(unique_keys, dict_list, encoder):
         else:
             table_words.append(encoder.transform(list(table_w)))
             w_size = max(w_size, max(table_words[-1]))
-        f_size = max(f_size, max(table_fields[-1]))
+
+        if len(table_f) == 0:
+            table_fields.append([])
+        else:
+            table_fields.append(list(table_f))
+            # w_size = max(w_size, max(table_words[-1]))
+            f_size = max(f_size, max(table_fields[-1]))
         f_len = max(f_len, len(table_fields[-1]))
         w_len = max(w_len, len(table_words[-1]))
         w_count = max(w_count, len(field))
@@ -162,7 +173,7 @@ def delexicalize(sentences, tables, vocabulary, keys):
     return list(field_names)
 
 
-def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform):
+def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors):
     path_to_files = path + "pickle/" + dataset
     pickle.dump(output, open(path_to_files + "/output.pickle", "wb"))
     pickle.dump(start, open(path_to_files + "/start.pickle", "wb"))
@@ -173,6 +184,7 @@ def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, fiel
     pickle.dump(infoboxes, open(path_to_files + "/infoboxes.pickle", "wb"))
     pickle.dump(field_transform, open(path_to_files + "/field_tf.pickle", "wb"))
     pickle.dump(word_transform, open(path_to_files + "/word_tf.pickle", "wb"))
+    pickle.dump(vectors, open(path_to_files + "/vectors.pickle", "wb"))
 
 
 if __name__ == '__main__':
@@ -186,7 +198,7 @@ if __name__ == '__main__':
     f_len = 0
     w_len = 0
     w_count = 0
-    indices, encoder, max_word_idx = get_words(sentences)
+    indices, encoder, max_word_idx, vectors = get_words(sentences)
     word_transform = dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))
     # print("get_words: " + str(time.time() - strt))
     # strt = time.time()
@@ -203,7 +215,7 @@ if __name__ == '__main__':
     output = np.concatenate((encoder.classes_, f_names))
     # print("delex: " + str(time.time() - strt))
     # strt = time.time()
-    save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform)
+    save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors)
     with open(path + "pickle/" + dataset + "/params.txt", "w") as g:
         g.write(" ".join(
             [str(max_word_idx), str(len(field_transform) * l + 2), str(f_size), str(w_size), str(loc_dim), str(f_len),
