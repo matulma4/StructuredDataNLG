@@ -22,7 +22,10 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     if use_ft:
         path_to_files = path + "pickle/" + dataset
         vectors = pickle.load(open(path_to_files + "/vectors.pickle", "wb"))
-        context = Embedding(input_dim=V, output_dim=d, input_length=l, weights=vectors)(c_input)
+        if vectors is not None:
+            context = Embedding(input_dim=V, output_dim=d, input_length=l, weights=vectors)(c_input)
+        else:
+            context = Embedding(input_dim=V, output_dim=d, input_length=l)(c_input)
     else:
         context = Embedding(input_dim=V, output_dim=d, input_length=l)(c_input)
     flat_context = Flatten()(context)
