@@ -1,6 +1,6 @@
 import os
 
-limit = None
+limit = 50
 sample_limit = 1000
 l = 10
 d = 64
@@ -8,7 +8,9 @@ g = 128
 n = 11
 V = 20000
 nhu = 256
-min_keys = 1
+min_keys = 10
+n_iter = 5
+decay_rate = 0
 
 global_cond = True
 local_cond = True

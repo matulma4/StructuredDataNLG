@@ -4,7 +4,7 @@ import keras.backend as K
 import numpy as np
 import pickle
 import sys
-from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation
+from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation, dot, add
 from keras.models import Model
 import os
 
@@ -21,13 +21,13 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     c_input = Input(shape=(l,), name='c_input')
     if use_ft:
         path_to_files = path + "pickle/" + dataset
-        vectors = pickle.load(open(path_to_files + "/vectors.pickle", "wb"))
+        vectors = pickle.load(open(path_to_files + "/vectors.pickle", "rb"))
         if vectors is not None:
-            context = Embedding(input_dim=V, output_dim=d, input_length=l, weights=vectors)(c_input)
+            context = Embedding(input_dim=V+1, output_dim=d, input_length=l, weights=[vectors])(c_input)
         else:
-            context = Embedding(input_dim=V, output_dim=d, input_length=l)(c_input)
+            context = Embedding(input_dim=V+1, output_dim=d, input_length=l)(c_input)
     else:
-        context = Embedding(input_dim=V, output_dim=d, input_length=l)(c_input)
+        context = Embedding(input_dim=V+1, output_dim=d, input_length=l)(c_input)
     flat_context = Flatten()(context)
 
     emb_list = [flat_context]
@@ -65,19 +65,20 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     else:
         merged = emb_list[0]
 
-    first = Dense(units=nhu, activation='tanh', input_dim=emb_dim)(merged)  # h(x), 256
-    second = Dense(units=V, name='second')(first)  # 20000
+    first = Dense(units=nhu, activation='tanh', input_dim=emb_dim, name='first')(merged)  # h(x), 256
+    second = Dense(units=O, name='second')(first)  # 20000
 
     # Mixing outputs
-    # mix = Embedding(input_dim=loc_dim, output_dim=d, input_length=V)(mix_input)  # 20000 x  x d
-    # third = Dense(units=nhu, activation='tanh')(mix)
-    # max_ftr = Lambda(lambda x: K.max(x, axis=1))(third)
-    # dot_prod = dot([max_ftr, first], axes=1)
-    # final = add([second, dot_prod])
-    activate = Activation('softmax', name='activation')(second)
+    input_list.append(mix_input)
+    mix = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=w_count*loc_dim, mask_zero=True)(mix_input)  # 20000 x  x d
+    third = Dense(units=nhu, activation='tanh',name='third')(mix)
+    max_ftr = Lambda(lambda x: K.max(x, axis=1))(third)
+    dot_prod = dot([max_ftr, first], axes=1)
+    final = add([second, dot_prod])
+    activate = Activation('softmax', name='activation')(final)
 
     model = Model(inputs=input_list, outputs=activate)
-    optimizer = SGD(lr=1, decay=1e-5)
+    optimizer = SGD(lr=1, decay=decay_rate)
     model.compile(optimizer=optimizer, loss='categorical_crossentropy')
     return model
 
@@ -108,12 +109,14 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         if global_cond:
             glob_field = np.pad(t_f[i], (0, f_len - len(t_f[i])), mode='constant')
             glob_word = np.pad(t_w[i], (0, w_len - len(t_w[i])), mode='constant')
-        # field = fields[i]
-        # mix_sample = []
-        # for t_key in field:
-        #     vt = np.unique([tv[0] * l + tv[1] for tv in field[t_key]])
-        #     mix_sample.append(np.pad(vt, (0, max_l - vt.shape[0]), mode='constant'))
-        # mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
+
+        field = fields[i]
+        mix_sample = []
+        for t_key in field:
+            vt = np.unique([tv[0] * l + tv[1] for tv in field[t_key]])
+            mix_sample.append(np.pad(vt, (0, max_l - vt.shape[0]), mode='constant'))
+        mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
+
         for j in range(l, len(idx)):
             context, s_context, e_context = create_one_sample(idx, s, e, j-l, j, max_l)
             samples_context.append(context)
@@ -123,7 +126,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             if global_cond:
                 samples_gf.append(glob_field)
                 samples_gw.append(glob_word)
-            # samples_mix.append(mix_sample)
+            samples_mix.append(mix_sample)
             t = np.zeros(len(output) + 1)
             try:
                 xx = np.where(output == sentences[i][j-l])
@@ -133,7 +136,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             target.append(t)
             samplecount += 1
             if samplecount == sample_limit:
-                input_ls = {'c_input': np.array(samples_context)}
+                input_ls = {'c_input': np.array(samples_context), 'mix_input': np.array(samples_mix)}
                 if local_cond:
                     input_ls['ls_input'] = np.array(samples_ls)
                     input_ls['le_input'] = np.array(samples_le)
@@ -154,7 +157,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                 target = []
                 samplecount = 0
 
-    input_ls = {'c_input': np.array(samples_context)}
+    input_ls = {'c_input': np.array(samples_context), 'mix_input' : np.array(samples_mix)}
     if local_cond:
         input_ls['ls_input'] = np.array(samples_ls)
         input_ls['le_input'] = np.array(samples_le)
@@ -183,14 +186,13 @@ def load_from_file():
 
 
 if __name__ == '__main__':
-    n_iter = 10
     global V
     with open(path + "pickle/" + dataset + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
 
     indices, start, end, t_fields, t_words, infoboxes, output, sentences = load_from_file()
-    V = output.shape[0]+1
+    O = output.shape[0]+1
     model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
     # for it in range(n_iter):
     create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
@@ -199,4 +201,3 @@ if __name__ == '__main__':
     # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = pickle.load(
     #     open(path + "samples/" + dataset + "/samples_0.pickle", "rb"))
     # V = target.shape[1]
-
