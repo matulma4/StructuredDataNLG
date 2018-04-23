@@ -23,11 +23,11 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
         path_to_files = path + "pickle/" + dataset
         vectors = pickle.load(open(path_to_files + "/vectors.pickle", "rb"))
         if vectors is not None:
-            context = Embedding(input_dim=V+1, output_dim=d, input_length=l, weights=[vectors])(c_input)
+            context = Embedding(input_dim=V+2, output_dim=d, input_length=l, weights=[vectors])(c_input)
         else:
-            context = Embedding(input_dim=V+1, output_dim=d, input_length=l)(c_input)
+            context = Embedding(input_dim=V+2, output_dim=d, input_length=l)(c_input)
     else:
-        context = Embedding(input_dim=V+1, output_dim=d, input_length=l)(c_input)
+        context = Embedding(input_dim=V+2, output_dim=d, input_length=l)(c_input)
     flat_context = Flatten()(context)
 
     emb_list = [flat_context]
@@ -58,7 +58,7 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
         input_list += [gf_input, gv_input]
         emb_dim += 2 * g
 
-    mix_input = Input(shape=(w_count, loc_dim,), name='mix_input')
+
     # loc_dim: number of fields x number of positions
     if global_cond or local_cond:
         merged = concatenate(emb_list)
@@ -69,13 +69,18 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     second = Dense(units=O, name='second')(first)  # 20000
 
     # Mixing outputs
-    input_list.append(mix_input)
-    mix = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=w_count*loc_dim, mask_zero=True)(mix_input)  # 20000 x  x d
-    third = Dense(units=nhu, activation='tanh',name='third')(mix)
-    max_ftr = Lambda(lambda x: K.max(x, axis=1))(third)
-    dot_prod = dot([max_ftr, first], axes=1)
-    final = add([second, dot_prod])
-    activate = Activation('softmax', name='activation')(final)
+    if use_mix:
+        mix_input = Input(shape=(w_count, loc_dim,), name='mix_input')
+        input_list.append(mix_input)
+        mix = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=w_count*loc_dim, mask_zero=True)(mix_input)  # 20000 x  x d
+        third = Dense(units=nhu, activation='tanh',name='third')(mix)
+        max_ftr = Lambda(lambda x: K.max(x, axis=1))(third)
+        dot_prod = dot([max_ftr, first], axes=1)
+        final = add([second, dot_prod])
+        activate = Activation('softmax', name='activation')(final)
+    else:
+        activate = Activation('softmax', name='activation')(second)
+
 
     model = Model(inputs=input_list, outputs=activate)
     optimizer = SGD(lr=1, decay=decay_rate)
@@ -111,11 +116,12 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             glob_word = np.pad(t_w[i], (0, w_len - len(t_w[i])), mode='constant')
 
         field = fields[i]
-        mix_sample = []
-        for t_key in field:
-            vt = np.unique([tv[0] * l + tv[1] for tv in field[t_key]])
-            mix_sample.append(np.pad(vt, (0, max_l - vt.shape[0]), mode='constant'))
-        mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
+        if use_mix:
+            mix_sample = []
+            for t_key in field:
+                vt = np.unique([tv[0] * l + tv[1] for tv in field[t_key]])
+                mix_sample.append(np.pad(vt, (0, max_l - vt.shape[0]), mode='constant'))
+            mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
 
         for j in range(l, len(idx)):
             context, s_context, e_context = create_one_sample(idx, s, e, j-l, j, max_l)
@@ -126,7 +132,8 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             if global_cond:
                 samples_gf.append(glob_field)
                 samples_gw.append(glob_word)
-            samples_mix.append(mix_sample)
+            if use_mix:
+                samples_mix.append(mix_sample)
             t = np.zeros(len(output) + 1)
             try:
                 xx = np.where(output == sentences[i][j-l])
@@ -136,13 +143,15 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             target.append(t)
             samplecount += 1
             if samplecount == sample_limit:
-                input_ls = {'c_input': np.array(samples_context), 'mix_input': np.array(samples_mix)}
+                input_ls = {'c_input': np.array(samples_context)}
                 if local_cond:
                     input_ls['ls_input'] = np.array(samples_ls)
                     input_ls['le_input'] = np.array(samples_le)
                 if global_cond:
                     input_ls['gf_input'] = np.array(samples_gf)
                     input_ls['gw_input'] = np.array(samples_gw)
+                if use_mix:
+                    input_ls['mix_input'] = np.array(samples_mix)
 
                 for it in range(n_iter):
                     loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
