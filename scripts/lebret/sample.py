@@ -9,7 +9,7 @@ sys.path.insert(0, parentdir)
 
 
 class Sample:
-    def __init__(self, score, sentence, indexes, t_words, starts, ends, infobox):
+    def __init__(self, score, sentence, indexes, t_words, t_fields, starts, ends, infobox):
         self.sentence = sentence
         self.score = score
         try:
@@ -20,5 +20,8 @@ class Sample:
             self.starts = starts + [list(set([j[1] + j[0] * l for j in infobox[sentence[-1]]]))]
             self.ends = ends + [list(set([j[2] + j[0] * l for j in infobox[sentence[-1]]]))]
         else:
-            self.starts = starts + [[]]
-            self.ends = ends + [[]]
+            self.starts = starts + [[len(t_fields)*l + 1]]
+            self.ends = ends + [[len(t_fields)*l + 1]]
+
+    def __repr__(self):
+        return " ".join(self.sentence[l:])
