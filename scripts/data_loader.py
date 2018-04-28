@@ -31,6 +31,7 @@ def load_infoboxes(path, dataset):
 
 
 def load_sentences():
+    punc = [",", ".", "-lrb-","-rrb-",'``',"''"] if drop_punc else []
     counts = [int(n.strip()) for n in open(data_path + "/" + dataset + ".nb")][:limit]
     result = []
     with open(data_path + "/" + dataset + ".sent", encoding="utf-8") as f:
@@ -42,7 +43,7 @@ def load_sentences():
                 person.append(f.readline().strip())
 
                 sent_count += 1
-            result.append(person[0].split())
+            result.append([p for p in person[0].split() if p not in punc])
     return result
 
 
