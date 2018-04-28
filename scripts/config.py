@@ -1,21 +1,26 @@
 import os
 
-limit = 1
-sample_limit = 1000
 l = 10
+V = 10000
+
+# data_process
+min_keys = 1
+limit = 10
+
+# main
+sample_limit = 10
 d = 64
 g = 128
-n = 11
-V = 20000
 nhu = 256
-min_keys = 1
 n_iter = 100
 decay_rate = 0
 
+
 global_cond = True
-local_cond = True
+local_cond = False
 use_ft = True
 use_mix = False
+drop_punc = False
 
 
 dataset = "valid"
