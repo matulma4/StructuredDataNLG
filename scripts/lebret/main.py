@@ -4,9 +4,9 @@ import keras.backend as K
 import numpy as np
 import pickle
 import sys
-from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation, dot, add
+from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation, dot, add, multiply
 from keras.models import Model
-import os
+import os, gc
 
 from keras.optimizers import SGD
 
@@ -15,6 +15,29 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 
 from config import *
+
+batch_len = 1
+
+
+def reset(k):
+    return [[] for _ in range(k)]
+
+
+def keras_log_likelihood(y_true, y_pred):
+    # tf_session = K.get_session()
+    mult = multiply([y_true, y_pred])
+    sm = K.sum(mult, axis=1)
+    var = K.ones(shape=[batch_len])*1e-5
+    res = -K.sum(K.log(add([sm, var])))
+    return res
+
+
+def log_likelihood(y_true, y_pred):
+    mult = np.multiply(y_true, y_pred)
+    sm = np.sum(mult, axis=1)
+    z = 1e-5 * np.ones(sm.shape[0])
+    res = -np.sum(np.log(sm + z))
+    return res
 
 
 def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_field_idx, max_glob_word_idx):
@@ -37,8 +60,8 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     if local_cond:
         ls_input = Input(shape=(l, loc_dim,), name='ls_input')
         le_input = Input(shape=(l, loc_dim,), name='le_input')
-        local_start = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=l, mask_zero=True)(ls_input)
-        local_end = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=l, mask_zero=True)(le_input)
+        local_start = Embedding(input_dim=max_loc_idx+1, output_dim=d, input_length=l, mask_zero=True)(ls_input)
+        local_end = Embedding(input_dim=max_loc_idx+1, output_dim=d, input_length=l, mask_zero=True)(le_input)
         ls_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_start)
         le_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_end)
         flat_ls = Flatten(input_shape=(l, d))(ls_lambda)
@@ -83,8 +106,8 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
 
 
     model = Model(inputs=input_list, outputs=activate)
-    optimizer = SGD(lr=1, decay=decay_rate)
-    model.compile(optimizer=optimizer, loss='categorical_crossentropy')
+    optimizer = SGD(lr=0.025, decay=decay_rate)
+    model.compile(optimizer=optimizer, loss=keras_log_likelihood)#'categorical_crossentropy')
     return model
 
 
@@ -97,15 +120,10 @@ def create_one_sample(idx, s, e, bi, ei, max_l):
 
 # TODO make global conditioning more effective
 def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentences):
-    samples_context = []
-    samples_ls = []
-    samples_le = []
-    samples_gf = []
-    samples_gw = []
-    samples_mix = []
-    target = []
+    samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset(7)
     # filecount = 0
     samplecount = 0
+    inputs, outputs = reset(2)
     lr = model.optimizer.lr
     for i in range(len(indices)):
         idx = indices[i]
@@ -142,42 +160,66 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                 t[-1] = 1.0
             target.append(t)
             samplecount += 1
-            if samplecount == sample_limit:
-                input_ls = {'c_input': np.array(samples_context)}
-                if local_cond:
-                    input_ls['ls_input'] = np.array(samples_ls)
-                    input_ls['le_input'] = np.array(samples_le)
-                if global_cond:
-                    input_ls['gf_input'] = np.array(samples_gf)
-                    input_ls['gw_input'] = np.array(samples_gw)
-                if use_mix:
-                    input_ls['mix_input'] = np.array(samples_mix)
-
-                for it in range(n_iter):
-                    loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
+            # if samplecount == sample_limit:
+        global batch_len
+        batch_len = len(samples_context)
+        input_ls = {'c_input': np.array(samples_context)}
+        if local_cond:
+            input_ls['ls_input'] = np.array(samples_ls)
+            input_ls['le_input'] = np.array(samples_le)
+        if global_cond:
+            input_ls['gf_input'] = np.array(samples_gf)
+            input_ls['gw_input'] = np.array(samples_gw)
+        if use_mix:
+            input_ls['mix_input'] = np.array(samples_mix)
+        inputs.append(input_ls)
+        outputs.append(target)
+        samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset(7)
+        if len(inputs) == sample_limit:
+            for it in range(n_iter):
+                for ex in range(sample_limit):
+                    loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
                     lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
-                    print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)))
-                samples_context = []
-                samples_ls = []
-                samples_le = []
-                samples_gf = []
-                samples_gw = []
-                samples_mix = []
-                target = []
-                samplecount = 0
+                    print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)))
+                    model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
+            inputs, outputs = reset(2)
+            # print(pred)
+            # pred = model.predict(x=input_ls)
+            # print(log_likelihood(target, pred))
+        samplecount = 0
+        gc.collect()
+    for it in range(n_iter):
+        for ex in range(len(inputs)):
+            loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
+            lr *= (
+            1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
+            print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(
+                loss) + ", learning rate: " + str(K.eval(lr)))
+            model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
 
-    input_ls = {'c_input': np.array(samples_context), 'mix_input' : np.array(samples_mix)}
-    if local_cond:
-        input_ls['ls_input'] = np.array(samples_ls)
-        input_ls['le_input'] = np.array(samples_le)
-    if global_cond:
-        input_ls['gf_input'] = np.array(samples_gf)
-        input_ls['gw_input'] = np.array(samples_gw)
+    # input_ls = {'c_input': np.array(samples_context), 'mix_input' : np.array(samples_mix)}
+    # if local_cond:
+    #     input_ls['ls_input'] = np.array(samples_ls)
+    #     input_ls['le_input'] = np.array(samples_le)
+    # if global_cond:
+    #     input_ls['gf_input'] = np.array(samples_gf)
+    #     input_ls['gw_input'] = np.array(samples_gw)
+    #
+    # for it in range(n_iter):
+    #     loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
+    #     lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
+    #     pred = np.argmax(model.predict(x=input_ls),axis=1)
+    #     t = np.argmax(target, axis=1)
+    #     acc = float(len(np.where(pred-t == 0)[0]))/float(len(target))*100.0
+    #     print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)) + ", Accuracy: " + str(acc))
 
+
+def train(input_ls, target, lr, samplecount):
     for it in range(n_iter):
         loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
         lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
-        print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)))
+        print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(
+            loss) + ", learning rate: " + str(K.eval(lr)))
 
 
 def load_from_file():
