@@ -37,6 +37,7 @@ def get_words(sentences):
 
 def local_conditioning(tf, f, sentences):
     F = len(tf)
+    # tftf = dict([(tf[key], key) for key in tf.keys()])
     start = []
     end = []
     max_len = 0
@@ -44,10 +45,11 @@ def local_conditioning(tf, f, sentences):
     for i in range(len(f)):
         ib = f[i]
         sent = sentences[i]
-        s_seq = [[F * l + 1] for _ in range(l)]
-        e_seq = [[F * l + 1] for _ in range(l)]
+        s_seq = [[F * l + 2] for _ in range(l)]
+        e_seq = [[F * l + 2] for _ in range(l)]
         for word in sent:
             if word in ib.keys():
+                # print(word + " appears in " + ", ".join([tftf[j[0]] + "/" + str(j[0]) + " at position " + str(j[1]) + " emb " + str(j[1] + j[0] * l) for j in ib[word]]))
                 s_seq.append(list(set([j[1] + j[0] * l for j in ib[word]])))
                 e_seq.append(list(set([j[2] + j[0] * l for j in ib[word]])))
                 max_len = max(len(s_seq[-1]), max_len)
@@ -188,11 +190,8 @@ def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, fiel
 
 
 if __name__ == '__main__':
-    # strt = time.time()
     dicts, u_keys = load_infoboxes(data_path, dataset)
     sentences = load_sentences()
-    # print("Loading: " + str(time.time() - strt))
-    # strt = time.time()
     f_size = 0
     w_size = 0
     f_len = 0
@@ -200,25 +199,15 @@ if __name__ == '__main__':
     w_count = 0
     indices, encoder, max_word_idx, vectors = get_words(sentences)
     word_transform = dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))
-    # print("get_words: " + str(time.time() - strt))
-    # strt = time.time()
     infoboxes, field_transform, t_fields, t_words, field_values = process_infoboxes(u_keys, dicts, encoder)
-
-    # print("process_infoboxes: " + str(time.time() - strt))
-    # strt = time.time()
     print("Size of vocabulary: " + str(max_word_idx))
     start, end, loc_dim = local_conditioning(field_transform, infoboxes, sentences)
-    # print("local_conditioning: " + str(time.time() - strt))
-    # strt = time.time()
     print("Number of fields: " + str(loc_dim))
     f_names = delexicalize(sentences, dicts, field_values, u_keys)
     output = np.concatenate((encoder.classes_, f_names))
-    # print("delex: " + str(time.time() - strt))
-    # strt = time.time()
     save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors)
     with open(path + "pickle/" + dataset + "/params.txt", "w") as g:
         g.write(" ".join(
             [str(max_word_idx), str(len(field_transform) * l + 2), str(f_size), str(w_size), str(loc_dim), str(f_len),
              str(w_len),
              str(w_count)]))
-    # print("samples: " + str(time.time() - strt))
