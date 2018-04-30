@@ -231,7 +231,7 @@ def load_from_file():
     t_fields = pickle.load(open(path_to_files + "/t_fields.pickle", "rb"))
     t_words = pickle.load(open(path_to_files + "/t_words.pickle", "rb"))
     infoboxes = pickle.load(open(path_to_files + "/infoboxes.pickle", "rb"))
-    with open(data_path + "/" + dataset + ".dlx", "r", encoding="utf-8") as g:
+    with open(path + "/pickle/" + dataset + "/sents.dlx", "r", encoding="utf-8") as g:
         sentences = [line.strip().split() for line in g]
     return indices, start, end, t_fields, t_words, infoboxes, output, sentences
 

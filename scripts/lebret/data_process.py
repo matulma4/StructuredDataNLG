@@ -154,7 +154,7 @@ def process_infoboxes(unique_keys, dict_list, encoder):
 
 def delexicalize(sentences, tables, vocabulary, keys):
     field_names = set()
-    g = open(data_path + "/" + dataset + ".dlx", "w", encoding="utf-8")
+    g = open(path + "/pickle/" + dataset + "/sents.dlx", "w", encoding="utf-8")
     for i in range(len(sentences)):
         table = tables[i]
         sentence = sentences[i]
