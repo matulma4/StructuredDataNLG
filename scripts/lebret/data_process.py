@@ -2,10 +2,13 @@ import inspect
 import os
 import re
 import sys
-import pickle
-import time
+import datetime as dt
 from collections import Counter
+
+import pickle
+
 import fastText.FastText as ft
+
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
@@ -28,9 +31,9 @@ def get_words(sentences):
     #     sents = [line.strip().split(" ") for line in open(data_path + "/" + dataset + ".oov", encoding='utf-8')]
     # else:
     sents = replace_oov(sentences, set(vocabulary))
-        # with open(data_path + "/" + dataset + ".oov", "w", encoding='utf-8') as g:
-        #     for sent in sents:
-        #         g.write(" ".join(sent) + "\n")
+    # with open(data_path + "/" + dataset + ".oov", "w", encoding='utf-8') as g:
+    #     for sent in sents:
+    #         g.write(" ".join(sent) + "\n")
     indices, encoder, max_word_idx = transform_to_indices(sents)
     return indices, encoder, max_word_idx, ft_vectors
 
@@ -176,7 +179,7 @@ def delexicalize(sentences, tables, vocabulary, keys):
 
 
 def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors):
-    path_to_files = path + "pickle/" + dataset
+    path_to_files = path + "pickle/" + dataset + "/" + hashed
     pickle.dump(output, open(path_to_files + "/output.pickle", "wb"))
     pickle.dump(start, open(path_to_files + "/start.pickle", "wb"))
     pickle.dump(end, open(path_to_files + "/end.pickle", "wb"))
@@ -190,23 +193,41 @@ def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, fiel
 
 
 if __name__ == '__main__':
+    hashed = dt.datetime.now().strftime("%Y%m%d")
+    hashed += str(l).zfill(2)
+    hashed += str(n_iter).zfill(3)
+    hashed += str(int(V/1000)).zfill(2)
+    hashed += str(int(drop_punc))
+    hashed += str(int(use_ft))
+    # for boole in [local_cond, global_cond, use_ft, use_mix, drop_punc]:
+    #     hashed += str(int(boole))
+    try:
+        os.mkdir(path + "pickle/" + dataset + "/" + hashed)
+    except FileExistsError:
+        pass
+
     dicts, u_keys = load_infoboxes(data_path, dataset)
     sentences = load_sentences()
+
     f_size = 0
     w_size = 0
     f_len = 0
     w_len = 0
     w_count = 0
+
     indices, encoder, max_word_idx, vectors = get_words(sentences)
     word_transform = dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))
     infoboxes, field_transform, t_fields, t_words, field_values = process_infoboxes(u_keys, dicts, encoder)
     print("Size of vocabulary: " + str(max_word_idx))
+
     start, end, loc_dim = local_conditioning(field_transform, infoboxes, sentences)
     print("Number of fields: " + str(loc_dim))
+
     f_names = delexicalize(sentences, dicts, field_values, u_keys)
     output = np.concatenate((encoder.classes_, f_names))
+
     save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors)
-    with open(path + "pickle/" + dataset + "/params.txt", "w") as g:
+    with open(path + "pickle/" + dataset + "/" + hashed + "/params.txt", "w") as g:
         g.write(" ".join(
             [str(max_word_idx), str(len(field_transform) * l + 2), str(f_size), str(w_size), str(loc_dim), str(f_len),
              str(w_len),

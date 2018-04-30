@@ -181,7 +181,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                     loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
                     lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
                     print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)))
-                    model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
+                    model.save(path + "models/" + dataset + "/" + hashed + ".h5")
             inputs, outputs = reset(2)
             # print(pred)
             # pred = model.predict(x=input_ls)
@@ -195,7 +195,7 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
             print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(
                 loss) + ", learning rate: " + str(K.eval(lr)))
-            model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
+            model.save(path + "models/" + dataset + "/" + hashed + ".h5")
 
     # input_ls = {'c_input': np.array(samples_context), 'mix_input' : np.array(samples_mix)}
     # if local_cond:
@@ -222,8 +222,8 @@ def train(input_ls, target, lr, samplecount):
             loss) + ", learning rate: " + str(K.eval(lr)))
 
 
-def load_from_file():
-    path_to_files = path + "pickle/" + dataset
+def load_from_file(hashed):
+    path_to_files = path + "pickle/" + dataset + "/" + hashed
     output = pickle.load(open(path_to_files + "/output.pickle", "rb"))
     start = pickle.load(open(path_to_files + "/start.pickle", "rb"))
     end = pickle.load(open(path_to_files + "/end.pickle", "rb"))
@@ -237,12 +237,18 @@ def load_from_file():
 
 
 if __name__ == '__main__':
-    global V
-    with open(path + "pickle/" + dataset + "/params.txt") as f:
+    global V, n_iter, l, use_ft
+    h = sys.argv[1]
+    l = int(h[8:10])
+    n_iter = int(h[10:13])
+    use_ft = bool(int(h[16]))
+    hashed = h + "".join([str(int(boole)) for boole in [local_cond, global_cond, use_mix]])
+
+    with open(path + "pickle/" + dataset + "/" + h + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
 
-    indices, start, end, t_fields, t_words, infoboxes, output, sentences = load_from_file()
+    indices, start, end, t_fields, t_words, infoboxes, output, sentences = load_from_file(h)
     O = output.shape[0]+1
     model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
     # for it in range(n_iter):

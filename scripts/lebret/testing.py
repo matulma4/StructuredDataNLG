@@ -21,7 +21,8 @@ def get_n_best(ls, n):
 
 
 def load_from_file(test_set, model_name):
-    path_to_files = path + "pickle/" + dataset
+    h = model_name[:-3]
+    path_to_files = path + "pickle/" + dataset + "/" + h
     output = np.append(pickle.load(open(path_to_files + "/output.pickle", "rb")), "<UNK>")
     # t_fields = pickle.load(open(path_to_files + "/t_fields.pickle", "rb"))
     # t_words = pickle.load(open(path_to_files + "/t_words.pickle", "rb"))
@@ -98,9 +99,10 @@ def beam_search(model, size, sent_length, n, output, word_tf, field_tf, gf, gw, 
         new_score = [nb.score for nb in new_beam]
         best_scores = get_n_best(new_score, size)
         beam = [new_beam[bs] for bs in best_scores]
-        for b in beam:
-            print(b.sentence[l:],str(b.score))
-        print("=======================================")
+        if output_beam:
+            for b in beam:
+                print(b.sentence[l:],str(b.score))
+            print("=======================================")
 
 
 def global_conditioning(t_f, t_w):
@@ -168,7 +170,10 @@ def test_accuracy(infoboxes, f_tf, w_tf, sentences):
 
 
 if __name__ == '__main__':
+    output_beam = False
     m_name = sys.argv[1]
+    global l
+    l = int(m_name[8:10])
     mode = 0
     infoboxes, output, model, field_transform, word_transform = load_from_file("valid", m_name)
     with open(path + "pickle/" + dataset + "/params.txt") as f:
