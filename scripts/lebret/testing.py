@@ -5,6 +5,8 @@ import sys
 import numpy as np
 import pickle
 from keras.models import load_model
+from nltk.translate.bleu_score import sentence_bleu
+
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -20,8 +22,14 @@ def get_n_best(ls, n):
     return arr.argsort()[-n:][::-1]
 
 
+def replace_fields(sent, ib):
+    for w in range(len(sent)):
+        word = sent[w]
+        if word in ib.keys():
+            sent[w] = ib[word]
+    return sent
+
 def load_from_file(test_set, model_name):
-    h = model_name[:-3]
     path_to_files = path + "pickle/" + dataset + "/" + h
     output = np.append(pickle.load(open(path_to_files + "/output.pickle", "rb")), "<UNK>")
     # t_fields = pickle.load(open(path_to_files + "/t_fields.pickle", "rb"))
@@ -120,6 +128,7 @@ def global_conditioning(t_f, t_w):
 def test_model(model, infoboxes, f_tf, w_tf, output):
     t_fields, t_words, ib = process_infoboxes(infoboxes, f_tf, w_tf)
     # indexes = [2]
+    generated = []
     for i in range(len(ib)):
         mix_sample = []
         for t_key in ib[i]:
@@ -127,7 +136,10 @@ def test_model(model, infoboxes, f_tf, w_tf, output):
             mix_sample.append(np.pad(vt, (0, loc_dim - vt.shape[0]), mode='constant'))
         mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
         gf, gw = global_conditioning(t_fields[i], t_words[i])
-        print(beam_search(model, 10, 20 + l, 5, output, w_tf, f_tf, gf, gw, ib[i], mix_sample)[l:])
+        gen = beam_search(model, 10, 20 + l, 5, output, w_tf, f_tf, gf, gw, ib[i], mix_sample)[l:]
+        print(gen)
+        generated.append(replace_fields(gen, infoboxes[i]))
+    return generated
 
 
 def test_one_sentence(gf, gw, c_init, s_init, e_init, sentence, output, ib, f_tf, w_tf):
@@ -175,12 +187,16 @@ if __name__ == '__main__':
     global l
     l = int(m_name[8:10])
     mode = 0
+    h = m_name[:-3]
     infoboxes, output, model, field_transform, word_transform = load_from_file("valid", m_name)
-    with open(path + "pickle/" + dataset + "/params.txt") as f:
+    with open(path + "pickle/" + dataset + "/" + h + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
     if mode == 0:
-        test_model(model, infoboxes, field_transform, word_transform, output)
+        gen_sents = test_model(model, infoboxes, field_transform, word_transform, output)
+        sents = load_sentences()
+        for pred, true in zip(gen_sents, sents):
+            print(sentence_bleu([true], pred, weights=(1, 0, 0, 0)))
     else:
         sentences = load_sentences()
         test_accuracy(infoboxes, field_transform, word_transform, sentences)
