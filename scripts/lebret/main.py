@@ -4,8 +4,10 @@ import keras.backend as K
 import numpy as np
 import pickle
 import sys
+
+import psutil
 from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation, dot, add, multiply
-from keras.models import Model
+from keras.models import Model, load_model
 import os, gc
 
 from keras.optimizers import SGD
@@ -21,6 +23,10 @@ batch_len = 1
 
 def reset(k):
     return [[] for _ in range(k)]
+
+
+def reset_none(k, r):
+    return [[None for _ in range(r)] for _ in range(k)]
 
 
 def keras_log_likelihood(y_true, y_pred):
@@ -118,17 +124,34 @@ def create_one_sample(idx, s, e, bi, ei, max_l):
     return context, e_context, s_context
 
 
+def dump_garbage():
+    """
+    show us what's the garbage about
+    """
+    ffs = 150
+    # force collection
+    print("\nGARBAGE:")
+    gc.collect()
+
+    print("\nGARBAGE OBJECTS:")
+    for x in gc.garbage:
+        s = str(gc.get_referrers(x))
+        if len(s) > ffs: s = s[:ffs]
+        print(str(x)[:ffs], "\n  ", s)
+
+
 # TODO make global conditioning more effective
 def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentences):
-    samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset(7)
+    # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset(7)
     # filecount = 0
     samplecount = 0
-    inputs, outputs = reset(2)
-    lr = model.optimizer.lr
+    inputs, outputs = reset_none(2, sample_limit)
+    # lr = model.optimizer.lr
     for i in range(len(indices)):
         idx = indices[i]
         s = start[i]
         e = end[i]
+        samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset_none(7, len(idx)-l)
         if global_cond:
             glob_field = np.pad(t_f[i], (0, f_len - len(t_f[i])), mode='constant')
             glob_word = np.pad(t_w[i], (0, w_len - len(t_w[i])), mode='constant')
@@ -143,23 +166,22 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
 
         for j in range(l, len(idx)):
             context, s_context, e_context = create_one_sample(idx, s, e, j-l, j, max_l)
-            samples_context.append(context)
+            samples_context[j-l] = context
             if local_cond:
-                samples_ls.append(s_context)
-                samples_le.append(e_context)
+                samples_ls[j-l] = s_context
+                samples_le[j-l] = e_context
             if global_cond:
-                samples_gf.append(glob_field)
-                samples_gw.append(glob_word)
+                samples_gf[j-l] = glob_field
+                samples_gw[j-l] = glob_word
             if use_mix:
-                samples_mix.append(mix_sample)
+                samples_mix[j-l] = mix_sample
             t = np.zeros(len(output) + 1)
             try:
-                xx = np.where(output == sentences[i][j-l])
-                t[xx[0][0]] = 1.0
+                t[np.where(output == sentences[i][j-l])[0][0]] = 1.0
             except IndexError:
                 t[-1] = 1.0
-            target.append(t)
-            samplecount += 1
+            target[j-l] = t
+            # del t
             # if samplecount == sample_limit:
         global batch_len
         batch_len = len(samples_context)
@@ -172,29 +194,36 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             input_ls['gw_input'] = np.array(samples_gw)
         if use_mix:
             input_ls['mix_input'] = np.array(samples_mix)
-        inputs.append(input_ls)
-        outputs.append(target)
-        samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset(7)
-        if len(inputs) == sample_limit:
+        inputs[samplecount] = input_ls
+        # del input_ls
+        outputs[samplecount] = target
+        # del target
+        samplecount += 1
+        # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset(7)
+        if samplecount == sample_limit:
             for it in range(n_iter):
                 for ex in range(sample_limit):
+            #
                     loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
-                    lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
-                    print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)))
+                    # lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
+                    print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(loss))
                     model.save(path + "models/" + dataset + "/" + hashed + ".h5")
-            inputs, outputs = reset(2)
+
+            inputs, outputs = reset_none(2, sample_limit)
+            samplecount = 0
             # print(pred)
             # pred = model.predict(x=input_ls)
             # print(log_likelihood(target, pred))
-        samplecount = 0
-        gc.collect()
+            gc.collect()
+            # process = psutil.Process(os.getpid())
+            # print(process.memory_info().rss)
     for it in range(n_iter):
-        for ex in range(len(inputs)):
+        for ex in range(samplecount):
             loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
-            lr *= (
-            1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
+            # lr *= (
+            # 1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
             print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(
-                loss) + ", learning rate: " + str(K.eval(lr)))
+                loss))
             model.save(path + "models/" + dataset + "/" + hashed + ".h5")
 
     # input_ls = {'c_input': np.array(samples_context), 'mix_input' : np.array(samples_mix)}
@@ -237,6 +266,8 @@ def load_from_file(hashed):
 
 
 if __name__ == '__main__':
+    gc.enable()
+    # gc.set_debug(gc.DEBUG_LEAK)
     global V, n_iter, l, use_ft
     h = sys.argv[1]
     l = int(h[8:10])
@@ -253,7 +284,7 @@ if __name__ == '__main__':
     model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
     # for it in range(n_iter):
     create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
-    model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
+    # model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
 
     # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = pickle.load(
     #     open(path + "samples/" + dataset + "/samples_0.pickle", "rb"))
