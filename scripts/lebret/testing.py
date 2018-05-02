@@ -89,7 +89,7 @@ def beam_search(model, size, sent_length, output, word_tf, field_tf, gf, gw, inf
         new_beam = []
         for b in beam:
             if len(b.sentence) == sent_length:# or b.sentence[-1] == '.':
-                return b.sentence
+                return b.sentence, b.score
                 # predict for each element in beam
             samples_context, samples_ls, samples_le = make_sample(b, loc_dim)
             prediction = model.predict(
@@ -127,9 +127,14 @@ def global_conditioning(t_f, t_w, f_len, w_len):
 
 
 def test_model(model, infoboxes, f_tf, w_tf, output):
-    t_fields, t_words, ib = process_infoboxes(infoboxes, f_tf, w_tf)
+    if os.path.exists(path + "pickle/" + dataset + "/" + h + "/test_ib.pickle"):
+        t_fields, t_words, ib = pickle.load(open(path + "pickle/" + dataset + "/" + h + "/test_ib.pickle", "rb"))
+    else:
+        t_fields, t_words, ib = process_infoboxes(infoboxes, f_tf, w_tf)
+        pickle.dump((t_fields, t_words, ib), open(path + "pickle/" + dataset + "/" + h + "/test_ib.pickle", "wb"))
     # indexes = [2]
     generated = []
+    scores = []
     for i in range(len(ib)):
         mix_sample = []
         for t_key in ib[i]:
@@ -137,10 +142,12 @@ def test_model(model, infoboxes, f_tf, w_tf, output):
             mix_sample.append(np.pad(vt, (0, loc_dim - vt.shape[0]), mode='constant'))
         mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
         gf, gw = global_conditioning(t_fields[i], t_words[i], f_len, w_len)
-        gen = beam_search(model, 10, 20 + l, output, w_tf, f_tf, gf, gw, ib[i], mix_sample, loc_dim, output_beam)[l:]
-        print(gen)
-        generated.append(replace_fields(gen, infoboxes[i]))
-    return generated
+        gen, score = beam_search(model, 10, 20 + l, output, w_tf, f_tf, gf, gw, ib[i], mix_sample, loc_dim, output_beam)
+        print(gen[l:])
+        generated.append(replace_fields(gen[l:], infoboxes[i]))
+        scores.append(np.power(1.0/np.exp(score), 1.0/float(len(gen))))
+
+    return generated, scores
 
 
 def test_one_sentence(gf, gw, c_init, s_init, e_init, sentence, output, ib, f_tf, w_tf):
@@ -185,6 +192,7 @@ def test_accuracy(infoboxes, f_tf, w_tf, sentences):
 if __name__ == '__main__':
     output_beam = False
     m_name = sys.argv[1]
+    metric = "bleu"
     global l
     l = int(m_name[8:10])
     mode = 0
@@ -194,18 +202,22 @@ if __name__ == '__main__':
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
     if mode == 0:
-        gen_sents = test_model(model, infoboxes, field_transform, word_transform, output)
+        gen_sents, gen_scores = test_model(model, infoboxes[:1000], field_transform, word_transform, output)
         sents = load_sentences()
-        unigram, bigram, trigram, fourgram = [[] for _ in range(4)]
-        for pred, true in zip(gen_sents, sents):
-            unigram.append(sentence_bleu([true], pred, weights=(1, 0, 0, 0)))
-            bigram.append(sentence_bleu([true], pred, weights=(0, 1, 0, 0)))
-            trigram.append(sentence_bleu([true], pred, weights=(0, 0, 1, 0)))
-            fourgram.append(sentence_bleu([true], pred, weights=(0, 0, 0, 1)))
-        print("Unigram BLEU: ", np.mean(unigram))
-        print("Bigram BLEU: ", np.mean(bigram))
-        print("Trigram BLEU: ", np.mean(trigram))
-        print("Fourgram BLEU: ", np.mean(fourgram))
+        if metric == "bleu":
+            unigram, bigram, trigram, fourgram = [[] for _ in range(4)]
+            for pred, true in zip(gen_sents, sents):
+                unigram.append(sentence_bleu([true], pred, weights=(1, 0, 0, 0)))
+                bigram.append(sentence_bleu([true], pred, weights=(0, 1, 0, 0)))
+                trigram.append(sentence_bleu([true], pred, weights=(0, 0, 1, 0)))
+                fourgram.append(sentence_bleu([true], pred, weights=(0, 0, 0, 1)))
+            print("Unigram BLEU: ", np.mean(unigram))
+            print("Bigram BLEU: ", np.mean(bigram))
+            print("Trigram BLEU: ", np.mean(trigram))
+            print("Fourgram BLEU: ", np.mean(fourgram))
+        else:
+            print(np.mean(gen_scores))
+
     else:
         sentences = load_sentences()
         test_accuracy(infoboxes, field_transform, word_transform, sentences)
