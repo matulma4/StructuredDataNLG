@@ -29,7 +29,8 @@ def replace_fields(sent, ib):
             sent[w] = ib[word]
     return sent
 
-def load_from_file(test_set, model_name):
+
+def load_from_file(test_set, model_name, h):
     path_to_files = path + "pickle/" + dataset + "/" + h
     output = np.append(pickle.load(open(path_to_files + "/output.pickle", "rb")), "<UNK>")
     # t_fields = pickle.load(open(path_to_files + "/t_fields.pickle", "rb"))
@@ -42,7 +43,7 @@ def load_from_file(test_set, model_name):
     return infoboxes, output, model, field_transform, word_transform
 
 
-def make_sample(b):
+def make_sample(b, loc_dim):
     context, s_context, e_context = create_one_sample(b.indexes, b.starts, b.ends, -l, None, loc_dim)
     return [context], [s_context], [e_context]
 
@@ -80,7 +81,7 @@ def process_infoboxes(dict_list, field_transform, word_transform):
     return table_fields, table_words, infoboxes
 
 
-def beam_search(model, size, sent_length, n, output, word_tf, field_tf, gf, gw, infobox, mix_sample):
+def beam_search(model, size, sent_length, output, word_tf, field_tf, gf, gw, infobox, mix_sample, loc_dim, output_beam):
     beam = [Sample(0.0, ["s" + str(i) for i in range(l)], [word_tf["s" + str(i)] for i in range(l - 1)], word_tf, field_tf,
                    [[len(field_tf)*l + 2] for i in range(l - 1)], [[len(field_tf)*l + 2] for i in range(l - 1)], infobox)]
     # init first sample
@@ -90,7 +91,7 @@ def beam_search(model, size, sent_length, n, output, word_tf, field_tf, gf, gw, 
             if len(b.sentence) == sent_length:# or b.sentence[-1] == '.':
                 return b.sentence
                 # predict for each element in beam
-            samples_context, samples_ls, samples_le = make_sample(b)
+            samples_context, samples_ls, samples_le = make_sample(b, loc_dim)
             prediction = model.predict(
                 {'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls),
                  'le_input': np.array(samples_le),
@@ -113,7 +114,7 @@ def beam_search(model, size, sent_length, n, output, word_tf, field_tf, gf, gw, 
             print("=======================================")
 
 
-def global_conditioning(t_f, t_w):
+def global_conditioning(t_f, t_w, f_len, w_len):
     if f_len >= len(t_f):
         gf = [np.pad(t_f, (0, f_len - len(t_f)), mode='constant')]
     else:
@@ -135,8 +136,8 @@ def test_model(model, infoboxes, f_tf, w_tf, output):
             vt = np.unique([tv[0] * l + tv[1] for tv in ib[i][t_key]])
             mix_sample.append(np.pad(vt, (0, loc_dim - vt.shape[0]), mode='constant'))
         mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
-        gf, gw = global_conditioning(t_fields[i], t_words[i])
-        gen = beam_search(model, 10, 20 + l, 5, output, w_tf, f_tf, gf, gw, ib[i], mix_sample)[l:]
+        gf, gw = global_conditioning(t_fields[i], t_words[i], f_len, w_len)
+        gen = beam_search(model, 10, 20 + l, output, w_tf, f_tf, gf, gw, ib[i], mix_sample, loc_dim, output_beam)[l:]
         print(gen)
         generated.append(replace_fields(gen, infoboxes[i]))
     return generated
@@ -188,15 +189,23 @@ if __name__ == '__main__':
     l = int(m_name[8:10])
     mode = 0
     h = m_name[:-3]
-    infoboxes, output, model, field_transform, word_transform = load_from_file("valid", m_name)
+    infoboxes, output, model, field_transform, word_transform = load_from_file("valid", m_name, h)
     with open(path + "pickle/" + dataset + "/" + h + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
     if mode == 0:
         gen_sents = test_model(model, infoboxes, field_transform, word_transform, output)
         sents = load_sentences()
+        unigram, bigram, trigram, fourgram = [[] for _ in range(4)]
         for pred, true in zip(gen_sents, sents):
-            print(sentence_bleu([true], pred, weights=(1, 0, 0, 0)))
+            unigram.append(sentence_bleu([true], pred, weights=(1, 0, 0, 0)))
+            bigram.append(sentence_bleu([true], pred, weights=(0, 1, 0, 0)))
+            trigram.append(sentence_bleu([true], pred, weights=(0, 0, 1, 0)))
+            fourgram.append(sentence_bleu([true], pred, weights=(0, 0, 0, 1)))
+        print("Unigram BLEU: ", np.mean(unigram))
+        print("Bigram BLEU: ", np.mean(bigram))
+        print("Trigram BLEU: ", np.mean(trigram))
+        print("Fourgram BLEU: ", np.mean(fourgram))
     else:
         sentences = load_sentences()
         test_accuracy(infoboxes, field_transform, word_transform, sentences)
