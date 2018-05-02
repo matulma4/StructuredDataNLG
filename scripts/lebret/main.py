@@ -112,7 +112,7 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
 
 
     model = Model(inputs=input_list, outputs=activate)
-    optimizer = SGD(lr=0.025, decay=decay_rate)
+    optimizer = SGD(lr=alpha, decay=decay_rate)
     model.compile(optimizer=optimizer, loss=keras_log_likelihood)#'categorical_crossentropy')
     return model
 
@@ -271,10 +271,10 @@ if __name__ == '__main__':
     global V, n_iter, l, use_ft
     h = sys.argv[1]
     l = int(h[8:10])
-    n_iter = int(h[10:13])
-    use_ft = bool(int(h[16]))
-    hashed = h + "".join([str(int(boole)) for boole in [local_cond, global_cond, use_mix]])
-
+    # n_iter = int(h[10:13])
+    use_ft = bool(int(h[13]))
+    hashed = h + str(n_iter).zfill(3) + "".join([str(int(boole)) for boole in [local_cond, global_cond, use_mix]])
+    alpha = 0.25
     with open(path + "pickle/" + dataset + "/" + h + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]

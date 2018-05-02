@@ -195,7 +195,7 @@ def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, fiel
 if __name__ == '__main__':
     hashed = dt.datetime.now().strftime("%Y%m%d")
     hashed += str(l).zfill(2)
-    hashed += str(n_iter).zfill(3)
+    # hashed += str(n_iter).zfill(3)
     hashed += str(int(V/1000)).zfill(2)
     hashed += str(int(drop_punc))
     hashed += str(int(use_ft))
