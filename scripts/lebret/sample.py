@@ -1,5 +1,6 @@
 import inspect
 import sys
+import numpy as np
 
 from config import *
 
@@ -25,3 +26,10 @@ class Sample:
 
     def __repr__(self):
         return " ".join(self.sentence[l:])
+
+
+class SampleHolder:
+    def __init__(self, b, score, word):
+        self.b = b
+        self.score = b.score + np.log(score)
+        self.word = word
