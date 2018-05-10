@@ -1,11 +1,10 @@
-import numpy as np
-import seaborn as sns
-import matplotlib.pylab as plt
 import sys
 
+import matplotlib.pylab as plt
+import numpy as np
+import seaborn as sns
+
 from config import *
-from sample import Sample
-from testing import make_sample, global_conditioning, process_infoboxes, load_from_file
 
 
 def make_heatmap(h_data):
@@ -14,11 +13,13 @@ def make_heatmap(h_data):
     plt.show()
 
 
-def get_attention(model, sentence, word_tf, field_tf, infobox, loc_dim, t_f, t_w):
+def get_attention(m_name):
+    from sample import Sample
+    from testing import make_sample, global_conditioning, process_infoboxes, load_from_file
     global l, V
     l = int(m_name[8:10])
     h = m_name[:-6]
-    infoboxes, output, model, field_transform, word_transform = load_from_file("test_r", m_name, h)
+    infoboxes, output, model, field_tf, word_tf = load_from_file("test_r", m_name, h)
     with open(path + "pickle/" + dataset + "/" + h + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
@@ -29,40 +30,71 @@ def get_attention(model, sentence, word_tf, field_tf, infobox, loc_dim, t_f, t_w
         ['there', 'are', '<UNK>', 'restaurant', '-s', 'in', 'the', 'square', 'luther', 'area', 'that', 'serve',
          'comfort', 'food', 'and', 'does', 'not', 'allow', 'child', '-s']]
 
-    t_fields, t_words, ib = process_infoboxes(infoboxes, field_transform, word_transform)
-    for i in range(2):
-        r = get_attention(model, sentences[i], word_transform, field_transform, ib[i], loc_dim, t_fields[i], t_words[i])
-        make_heatmap(np.array(r))
-    pass
-    s = Sample(0.0, ["s" + str(i) for i in range(l)], [word_tf["s" + str(i)] for i in range(l - 1)], word_tf, field_tf,
-               [[len(field_tf) * l + 2] for _ in range(l - 1)], [[len(field_tf) * l + 2] for _ in range(l - 1)],
-               infobox)
-    mix_sample = []
-    result = []
-    for t_key in infobox:
-        vt = np.unique([tv[0] * l + tv[1] for tv in infobox[t_key]])
-        mix_sample.append(np.pad(vt, (0, loc_dim - vt.shape[0]), mode='constant'))
-    mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
-    gf, gw = global_conditioning(t_f, t_w, f_len, w_len)
-    for j in range(l, len(sentence)):
-        word = sentence[j]
-        # construct sample
-        samples_context, samples_ls, samples_le = make_sample(s, loc_dim)
-        # predict
-        prediction = model.predict(
-            {'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls),
-             'le_input': np.array(samples_le),
-             'gf_input': np.array(gf),
-             'gw_input': np.array(gw),
-             'mix_input': np.array([mix_sample])
-             })
-        # save part of vector
-        result.append(prediction[0][V:])
-        s = Sample(0.0, s.indexes + [word], s.indexes, word_tf, field_tf,
-               s.starts, s.ends,
-               infobox)
-    # return attentions
-    return result
+    t_fields, t_words, ib = process_infoboxes(infoboxes, field_tf, word_tf)
+    for k in range(2):
+        t_f = t_fields[k]
+        t_w = t_words[k]
+        infobox = ib[k]
+        sentence = sentences[k]
+        #     r = get_attention(model, sentences[k], word_transform, field_transform, ib[k], loc_dim, t_fields[k], t_words[k])
+        #     make_heatmap(np.array(r))
+        #     pass
+        s = Sample(0.0, ["s" + str(i) for i in range(l)], [word_tf["s" + str(i)] for i in range(l - 1)], word_tf,
+                   field_tf,
+                   [[len(field_tf) * l + 2] for _ in range(l - 1)], [[len(field_tf) * l + 2] for _ in range(l - 1)],
+                   infobox)
+        mix_sample = []
+        vector = []
+        for t_key in infobox:
+            vt = np.unique([tv[0] * l + tv[1] for tv in infobox[t_key]])
+            mix_sample.append(np.pad(vt, (0, loc_dim - vt.shape[0]), mode='constant'))
+        mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
+        gf, gw = global_conditioning(t_f, t_w, f_len, w_len)
+        for j in range(l, len(sentence)):
+            word = sentence[j]
+            # construct sample
+            samples_context, samples_ls, samples_le = make_sample(s, loc_dim)
+            # predict
+            prediction = model.predict(
+                {'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls),
+                 'le_input': np.array(samples_le),
+                 'gf_input': np.array(gf),
+                 'gw_input': np.array(gw),
+                 'mix_input': np.array([mix_sample])
+                 })
+            # save part of vector
+            vector.append(prediction[0][V:])
+            s = Sample(0.0, s.indexes + [word], s.indexes, word_tf, field_tf,
+                       s.starts, s.ends,
+                       infobox)
+        make_heatmap(np.array(vector))
+        # return attentions
+        # return vector
+
+
+def make_bar(data, labels, h):
+    colors = ['r', 'g', 'b', 'y', 'c']
+    fig, ax = plt.subplots()
+    index = np.arange(1, len(data[0]) + 1)
+    width = 0.35 / (len(data)/2)
+    bar = 0
+    for i in range(len(data)):
+        plt.bar(index + bar, data[i], width,
+                color=colors[i],
+                label=labels[i])
+        bar += width
+    plt.xlabel('Group')
+    plt.ylabel('Scores')
+    plt.title('Results')
+    plt.xticks(index + (bar - width) / 2, ('BLEU-1', 'BLEU-2', 'BLEU-3', 'BLEU-4', 'BLEU', 'Perplexity'))
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(path + "pictures/" + h + ".png", dpi=300)
+
 
 if __name__ == '__main__':
-    m_name = sys.argv[1]
+    model_name = sys.argv[1]
+    d = [[1, 2, 3, 4], [4, 5, 6, 4]]
+    lab = ["a", "b"]
+    make_bar(d, lab, 'bar')
