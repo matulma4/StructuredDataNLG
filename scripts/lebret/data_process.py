@@ -207,7 +207,7 @@ if __name__ == '__main__':
         pass
 
     dicts, u_keys = load_infoboxes(data_path, dataset)
-    sentences = load_sentences()
+    sentences = load_sentences(data_path, dataset)
 
     f_size = 0
     w_size = 0

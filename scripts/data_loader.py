@@ -30,11 +30,11 @@ def load_infoboxes(path, dataset):
     return result, set(unique_keys)
 
 
-def load_sentences():
+def load_sentences(pth, d_set):
     punc = [",", ".", "-lrb-","-rrb-",'``',"''"] if drop_punc else []
-    counts = [int(n.strip()) for n in open(data_path + "/" + dataset + ".nb")][:limit]
+    counts = [int(n.strip()) for n in open(pth + "/" + d_set + ".nb")][:limit]
     result = []
-    with open(data_path + "/" + dataset + ".sent", encoding="utf-8") as f:
+    with open(pth + "/" + d_set + ".sent", encoding="utf-8") as f:
         for person_index in range(len(counts)):
             sent_count = 0
             person = []
