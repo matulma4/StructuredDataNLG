@@ -1,15 +1,12 @@
 import inspect
+import os
+import sys
 
 import keras.backend as K
 import numpy as np
 import pickle
-import sys
-
-import psutil
 from keras.layers import Embedding, Input, Dense, Lambda, concatenate, Flatten, Activation, dot, add, multiply
-from keras.models import Model, load_model
-import os, gc
-
+from keras.models import Model
 from keras.optimizers import SGD
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -33,7 +30,7 @@ def keras_log_likelihood(y_true, y_pred):
     # tf_session = K.get_session()
     mult = multiply([y_true, y_pred])
     sm = K.sum(mult, axis=1)
-    var = K.ones(shape=[batch_len])*1e-5
+    var = K.ones(shape=[batch_len]) * 1e-5
     res = -K.sum(K.log(add([sm, var])))
     return res
 
@@ -52,11 +49,11 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
         path_to_files = path + "pickle/" + dataset
         vectors = pickle.load(open(path_to_files + "/vectors.pickle", "rb"))
         if vectors is not None:
-            context = Embedding(input_dim=V+2, output_dim=d, input_length=l, weights=[vectors])(c_input)
+            context = Embedding(input_dim=V + 2, output_dim=d, input_length=l, weights=[vectors])(c_input)
         else:
-            context = Embedding(input_dim=V+2, output_dim=d, input_length=l)(c_input)
+            context = Embedding(input_dim=V + 2, output_dim=d, input_length=l)(c_input)
     else:
-        context = Embedding(input_dim=V+2, output_dim=d, input_length=l)(c_input)
+        context = Embedding(input_dim=V + 2, output_dim=d, input_length=l)(c_input)
     flat_context = Flatten()(context)
 
     emb_list = [flat_context]
@@ -66,8 +63,8 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     if local_cond:
         ls_input = Input(shape=(l, loc_dim,), name='ls_input')
         le_input = Input(shape=(l, loc_dim,), name='le_input')
-        local_start = Embedding(input_dim=max_loc_idx+1, output_dim=d, input_length=l, mask_zero=True)(ls_input)
-        local_end = Embedding(input_dim=max_loc_idx+1, output_dim=d, input_length=l, mask_zero=True)(le_input)
+        local_start = Embedding(input_dim=max_loc_idx + 1, output_dim=d, input_length=l, mask_zero=True)(ls_input)
+        local_end = Embedding(input_dim=max_loc_idx + 1, output_dim=d, input_length=l, mask_zero=True)(le_input)
         ls_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_start)
         le_lambda = Lambda(lambda x: K.max(x, axis=2), output_shape=(l, d))(local_end)
         flat_ls = Flatten(input_shape=(l, d))(ls_lambda)
@@ -87,7 +84,6 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
         input_list += [gf_input, gv_input]
         emb_dim += 2 * g
 
-
     # loc_dim: number of fields x number of positions
     if global_cond or local_cond:
         merged = concatenate(emb_list)
@@ -101,8 +97,9 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     if use_mix:
         mix_input = Input(shape=(w_count, loc_dim,), name='mix_input')
         input_list.append(mix_input)
-        mix = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=w_count*loc_dim, mask_zero=True)(mix_input)  # 20000 x  x d
-        third = Dense(units=nhu, activation='tanh',name='third')(mix)
+        mix = Embedding(input_dim=max_loc_idx, output_dim=d, input_length=w_count * loc_dim, mask_zero=True)(
+            mix_input)  # 20000 x  x d
+        third = Dense(units=nhu, activation='tanh', name='third')(mix)
         max_ftr = Lambda(lambda x: K.max(x, axis=1))(third)
         dot_prod = dot([max_ftr, first], axes=1)
         final = add([second, dot_prod])
@@ -110,10 +107,9 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
     else:
         activate = Activation('softmax', name='activation')(second)
 
-
     model = Model(inputs=input_list, outputs=activate)
     optimizer = SGD(lr=alpha, decay=decay_rate)
-    model.compile(optimizer=optimizer, loss=keras_log_likelihood)#'categorical_crossentropy')
+    model.compile(optimizer=optimizer, loss=keras_log_likelihood)  # 'categorical_crossentropy')
     return model
 
 
@@ -151,7 +147,8 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         idx = indices[i]
         s = start[i]
         e = end[i]
-        samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset_none(7, len(idx)-l)
+        samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset_none(7,
+                                                                                                          len(idx) - l)
         if global_cond:
             glob_field = np.pad(t_f[i], (0, f_len - len(t_f[i])), mode='constant')
             glob_word = np.pad(t_w[i], (0, w_len - len(t_w[i])), mode='constant')
@@ -160,27 +157,27 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         if use_mix:
             mix_sample = []
             for t_key in field:
-                vt = np.unique([tv[0] * l + tv[1] for tv in field[t_key]])
+                vt = np.unique([tv[0] * l + tv[1] for tv in field[t_key][:max_l]])
                 mix_sample.append(np.pad(vt, (0, max_l - vt.shape[0]), mode='constant'))
             mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
 
         for j in range(l, len(idx)):
-            context, s_context, e_context = create_one_sample(idx, s, e, j-l, j, max_l)
-            samples_context[j-l] = context
+            context, s_context, e_context = create_one_sample(idx, s, e, j - l, j, max_l)
+            samples_context[j - l] = context
             if local_cond:
-                samples_ls[j-l] = s_context
-                samples_le[j-l] = e_context
+                samples_ls[j - l] = s_context
+                samples_le[j - l] = e_context
             if global_cond:
-                samples_gf[j-l] = glob_field
-                samples_gw[j-l] = glob_word
+                samples_gf[j - l] = glob_field
+                samples_gw[j - l] = glob_word
             if use_mix:
-                samples_mix[j-l] = mix_sample
+                samples_mix[j - l] = mix_sample
             t = np.zeros(len(output) + 1)
             try:
-                t[np.where(output == sentences[i][j-l])[0][0]] = 1.0
+                t[np.where(output == sentences[i][j - l])[0][0]] = 1.0
             except IndexError:
                 t[-1] = 1.0
-            target[j-l] = t
+            target[j - l] = t
             # del t
             # if samplecount == sample_limit:
         global batch_len
@@ -203,11 +200,11 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         if samplecount == sample_limit:
             for it in range(n_iter):
                 for ex in range(sample_limit):
-            #
+                    #
                     loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
                     # lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
                     print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(loss))
-                    model.save(path + "models/" + dataset + "/" + hashed + ".h5")
+                model.save(path + "models/" + dataset + "/" + hashed + ".h5")
 
             inputs, outputs = reset_none(2, sample_limit)
             samplecount = 0
@@ -226,21 +223,21 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
                 loss))
             model.save(path + "models/" + dataset + "/" + hashed + ".h5")
 
-    # input_ls = {'c_input': np.array(samples_context), 'mix_input' : np.array(samples_mix)}
-    # if local_cond:
-    #     input_ls['ls_input'] = np.array(samples_ls)
-    #     input_ls['le_input'] = np.array(samples_le)
-    # if global_cond:
-    #     input_ls['gf_input'] = np.array(samples_gf)
-    #     input_ls['gw_input'] = np.array(samples_gw)
-    #
-    # for it in range(n_iter):
-    #     loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
-    #     lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
-    #     pred = np.argmax(model.predict(x=input_ls),axis=1)
-    #     t = np.argmax(target, axis=1)
-    #     acc = float(len(np.where(pred-t == 0)[0]))/float(len(target))*100.0
-    #     print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)) + ", Accuracy: " + str(acc))
+            # input_ls = {'c_input': np.array(samples_context), 'mix_input' : np.array(samples_mix)}
+            # if local_cond:
+            #     input_ls['ls_input'] = np.array(samples_ls)
+            #     input_ls['le_input'] = np.array(samples_le)
+            # if global_cond:
+            #     input_ls['gf_input'] = np.array(samples_gf)
+            #     input_ls['gw_input'] = np.array(samples_gw)
+            #
+            # for it in range(n_iter):
+            #     loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
+            #     lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
+            #     pred = np.argmax(model.predict(x=input_ls),axis=1)
+            #     t = np.argmax(target, axis=1)
+            #     acc = float(len(np.where(pred-t == 0)[0]))/float(len(target))*100.0
+            #     print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)) + ", Accuracy: " + str(acc))
 
 
 def train(input_ls, target, lr, samplecount):
@@ -274,13 +271,13 @@ if __name__ == '__main__':
     # n_iter = int(h[10:13])
     use_ft = bool(int(h[13]))
     hashed = h + str(n_iter).zfill(3) + "".join([str(int(boole)) for boole in [local_cond, global_cond, use_mix]])
-    alpha = 0.25
+    alpha = 0.025
     with open(path + "pickle/" + dataset + "/" + h + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
 
     indices, start, end, t_fields, t_words, infoboxes, output, sentences = load_from_file(h)
-    O = output.shape[0]+1
+    O = output.shape[0] + 1
     model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
     # for it in range(n_iter):
     create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
