@@ -1,11 +1,14 @@
 import inspect
 import os
 import sys
+import time
 
 import numpy as np
 import pickle
 from keras.models import load_model
 from nltk.translate.bleu_score import sentence_bleu
+
+from beam import Beam
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -14,7 +17,7 @@ from config import *
 from sample import Sample, SampleHolder
 from main import create_one_sample, keras_log_likelihood
 from data_loader import load_infoboxes, load_sentences
-
+from nltk.translate.bleu_score import SmoothingFunction
 
 def get_n_best(ls, n):
     arr = np.array(ls)
@@ -89,8 +92,9 @@ def beam_search(model, size, sent_length, output, word_tf, field_tf, gf, gw, inf
     # init first sample
     while True:
         new_beam = []
+        new_score = []
         for b in beam:
-            if len(b.sentence) == sent_length:  # or b.sentence[-1] == '.':
+            if len(b.sentence) == sent_length:# or b.sentence[-1] == '.':
                 return b.sentence, b.score
                 # predict for each element in beam
             samples_context, samples_ls, samples_le = make_sample(b, loc_dim)
@@ -101,19 +105,15 @@ def beam_search(model, size, sent_length, output, word_tf, field_tf, gf, gw, inf
                  'gw_input': np.array(gw),
                  'mix_input': np.array([mix_sample])
                  })
-            best_pred = get_n_best(prediction[0], prediction.shape[1])
-            for p in best_pred:
-                score = prediction[0][p]
-                # s = Sample(b.score + np.log(score), b.sentence + [output[p]], b.indexes, word_tf, field_tf, b.starts, b.ends,
-                #            infobox)
-                s = SampleHolder(b, score, output[p])
-                new_beam.append(s)
-        new_score = [nb.score for nb in new_beam]
+            new_beam += [(b, output[p]) for p in range(prediction.shape[1])]
+            new_score += [np.log(prediction[0][p]) + b.score for p in range(prediction.shape[1])]
         best_scores = get_n_best(new_score, size)
         beam = [
-            Sample(new_beam[bs].score, new_beam[bs].b.sentence + [new_beam[bs].word], new_beam[bs].b.indexes, word_tf,
-                   field_tf, new_beam[bs].b.starts, new_beam[bs].b.ends,
-                   infobox) for bs in best_scores]
+            Sample(new_score[bs], new_beam[bs][0].sentence + [new_beam[bs][1]], new_beam[bs][0].indexes, word_tf,
+                   field_tf, new_beam[bs][0].starts, new_beam[bs][0].ends,
+                   infobox) for bs in best_scores
+            ]
+
         if output_beam:
             for b in beam:
                 print(b.sentence[l:], str(b.score))
@@ -133,6 +133,7 @@ def global_conditioning(t_f, t_w, f_len, w_len):
 
 
 def test_model(model, infoboxes, f_tf, w_tf, output):
+    outfile = open(m_name + ".out", "w")
     if os.path.exists(path + "pickle/" + dataset + "/" + h + "/test_ib.pickle"):
         t_fields, t_words, ib = pickle.load(open(path + "pickle/" + dataset + "/" + h + "/test_ib.pickle", "rb"))
     else:
@@ -149,10 +150,11 @@ def test_model(model, infoboxes, f_tf, w_tf, output):
         mix_sample = np.pad(np.array(mix_sample), ((0, w_count - len(mix_sample)), (0, 0)), mode='constant')
         gf, gw = global_conditioning(t_fields[i], t_words[i], f_len, w_len)
         gen, score = beam_search(model, 10, 20 + l, output, w_tf, f_tf, gf, gw, ib[i], mix_sample, loc_dim, output_beam)
-        print(gen[l:])
-        generated.append(replace_fields(gen[l:], infoboxes[i]))
+        rep = replace_fields(gen[l:], infoboxes[i])
+        outfile.write(" ".join(rep) + "\n")
+        generated.append(rep)
         scores.append(np.power(1.0 / np.exp(score), 1.0 / float(len(gen))))
-
+    outfile.close()
     return generated, scores
 
 
@@ -201,29 +203,26 @@ if __name__ == '__main__':
     metric = "bleu"
     global l
     l = int(m_name[8:10])
+    test_set = "test_r"
     mode = 0
-    h = m_name[:-3]
-    infoboxes, output, model, field_transform, word_transform = load_from_file("valid", m_name, h)
+    h = m_name[:-6]
+    infoboxes, output, model, field_transform, word_transform = load_from_file(test_set, m_name, h)
     with open(path + "pickle/" + dataset + "/" + h + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
     if mode == 0:
-        gen_sents, gen_scores = test_model(model, infoboxes[:1000], field_transform, word_transform, output)
-        sents = load_sentences()
-        if metric == "bleu":
-            unigram, bigram, trigram, fourgram = [[] for _ in range(4)]
-            for pred, true in zip(gen_sents, sents):
-                unigram.append(sentence_bleu([true], pred, weights=(1, 0, 0, 0)))
-                bigram.append(sentence_bleu([true], pred, weights=(0, 1, 0, 0)))
-                trigram.append(sentence_bleu([true], pred, weights=(0, 0, 1, 0)))
-                fourgram.append(sentence_bleu([true], pred, weights=(0, 0, 0, 1)))
-            print("Unigram BLEU: ", np.mean(unigram))
-            print("Bigram BLEU: ", np.mean(bigram))
-            print("Trigram BLEU: ", np.mean(trigram))
-            print("Fourgram BLEU: ", np.mean(fourgram))
-        else:
-            print(np.mean(gen_scores))
+        start = time.time()
+        gen_sents, gen_scores = test_model(model, infoboxes[:10], field_transform, word_transform, output)
+        print(time.time()-start)
+        sents = load_sentences(test_path + test_set + "/", test_set)
+        bleu = []
+        smooth = SmoothingFunction().method4
+        for pred, true in zip(gen_sents, sents):
+            bleu.append(sentence_bleu([true], pred, smoothing_function=smooth))
+        print("BLEU: ", np.mean(bleu))
+        # else:
+        print("Perplexity: ", np.mean(gen_scores))
 
     else:
-        sentences = load_sentences()
+        sentences = load_sentences("","")
         test_accuracy(infoboxes, field_transform, word_transform, sentences)
