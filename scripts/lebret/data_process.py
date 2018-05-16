@@ -21,26 +21,33 @@ from data_loader import load_sentences, load_infoboxes
 
 
 def get_words(sentences):
+	"""
+	Obtain encoded vocabulary, the map converting words to numbers and fastText vectors, if needed.
+
+    Keyword arguments:
+    sentences -- list of lists of strings representing words in sentences
+    """
     vocabulary = get_most_frequent(sentences, True)
     if use_ft:
         ft_model = ft.load_model(data_path + "/" + dataset + "_vectors.bin")
         ft_vectors = np.array([ft_model.get_word_vector(v) for v in vocabulary])
     else:
         ft_vectors = None
-    # if False:#os.path.exists(data_path + "/" + dataset + ".oov"):
-    #     sents = [line.strip().split(" ") for line in open(data_path + "/" + dataset + ".oov", encoding='utf-8')]
-    # else:
     sents = replace_oov(sentences, set(vocabulary))
-    # with open(data_path + "/" + dataset + ".oov", "w", encoding='utf-8') as g:
-    #     for sent in sents:
-    #         g.write(" ".join(sent) + "\n")
     indices, encoder, max_word_idx = transform_to_indices(sents)
     return indices, encoder, max_word_idx, ft_vectors
 
 
 def local_conditioning(tf, f, sentences):
+	"""
+	Create local embeddings for the sentences
+
+    Keyword arguments:
+    tf -- map converting keys to indices
+    f -- list of infoboxes
+    sentences -- list of lists of strings representing words in sentences
+    """
     F = len(tf)
-    # tftf = dict([(tf[key], key) for key in tf.keys()])
     start = []
     end = []
     max_len = 0
@@ -52,7 +59,6 @@ def local_conditioning(tf, f, sentences):
         e_seq = [[F * l + 2] for _ in range(l)]
         for word in sent:
             if word in ib.keys():
-                # print(word + " appears in " + ", ".join([tftf[j[0]] + "/" + str(j[0]) + " at position " + str(j[1]) + " emb " + str(j[1] + j[0] * l) for j in ib[word]]))
                 s_seq.append(list(set([j[1] + j[0] * l for j in ib[word]])))
                 e_seq.append(list(set([j[2] + j[0] * l for j in ib[word]])))
                 max_len = max(len(s_seq[-1]), max_len)
@@ -67,6 +73,13 @@ def local_conditioning(tf, f, sentences):
 
 
 def replace_oov(sentences, vocabulary):
+	"""
+	Replace out of vocabulary words in sentences with tokens and prepend them
+
+    Keyword arguments:
+    sentences -- list of lists of strings representing words in sentences
+    vocabulary -- list of words representing vocabulary
+    """
     new_sentences = []
     for i in range(len(sentences)):
         new_sentence = []
@@ -82,18 +95,28 @@ def replace_oov(sentences, vocabulary):
 
 
 def transform_to_indices(data):
+	"""
+	Convert words to indices
+
+    Keyword arguments:
+    data -- list of sentences
+    """
     values = list(set(([b for a in data for b in a])))
     label_encoder = LabelEncoder()
     label_encoder.fit(values)
     i = 0
     result = [label_encoder.transform(d) for d in data]
-    # for d in data:
-    #     result.append(integer_encoded[i:i + len(d)])
-    #     i += len(d)
     return result, label_encoder, max(label_encoder.transform(values))
 
 
 def get_most_frequent(all_sents, sub_numbers):
+	"""
+	Create a vocabulary by keeping only words occurring V times
+
+    Keyword arguments:
+    all_sents -- list of lists of strings representing words in sentences
+    sub_numbers -- indicator if numbers should be replaced with tokens
+    """
     if sub_numbers:
         words = [re.sub("[0-9]+", "<NUMBER>", re.sub("([1-2]?[0-9]{3}|3000)", "<YEAR>", a)) for b in all_sents for a in
                  b]
@@ -105,6 +128,14 @@ def get_most_frequent(all_sents, sub_numbers):
 
 
 def process_infoboxes(unique_keys, dict_list, encoder):
+	"""
+	Transform field names into indices, filter
+
+    Keyword arguments:
+    unique_keys -- list of keys
+    dict_list -- list of infoboxes
+    encoder -- map transforming words to indices
+    """
     global f_size, w_size, f_len, w_len, w_count
     infoboxes = []
     u_k = list(unique_keys)
@@ -156,6 +187,15 @@ def process_infoboxes(unique_keys, dict_list, encoder):
 
 
 def delexicalize(sentences, tables, vocabulary, keys):
+	"""
+	Replace out of vocabulary words with field names
+
+    Keyword arguments:
+    sentences -- list of lists of strings representing words in sentences
+    tables -- list of infoboxes
+    vocabulary -- list of words
+    keys -- list of field names
+    """
     field_names = set()
     g = open(path + "/pickle/" + dataset + "/" + hashed + "/sents.dlx", "w", encoding="utf-8")
     for i in range(len(sentences)):
@@ -179,6 +219,10 @@ def delexicalize(sentences, tables, vocabulary, keys):
 
 
 def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors):
+	"""
+	Save processed objects to file
+	
+    """
     path_to_files = path + "pickle/" + dataset + "/" + hashed
     pickle.dump(output, open(path_to_files + "/output.pickle", "wb"))
     pickle.dump(start, open(path_to_files + "/start.pickle", "wb"))
@@ -193,19 +237,19 @@ def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, fiel
 
 
 if __name__ == '__main__':
+
+	# Create unique name
     hashed = dt.datetime.now().strftime("%Y%m%d")
     hashed += str(l).zfill(2)
-    # hashed += str(n_iter).zfill(3)
     hashed += str(int(V/1000)).zfill(2)
     hashed += str(int(drop_punc))
     hashed += str(int(use_ft))
-    # for boole in [local_cond, global_cond, use_ft, use_mix, drop_punc]:
-    #     hashed += str(int(boole))
     try:
         os.mkdir(path + "pickle/" + dataset + "/" + hashed)
     except FileExistsError:
         pass
 
+	# Load data from file
     dicts, u_keys = load_infoboxes(data_path, dataset)
     sentences = load_sentences(data_path, dataset)
 
@@ -215,6 +259,7 @@ if __name__ == '__main__':
     w_len = 0
     w_count = 0
 
+	# Process the data
     indices, encoder, max_word_idx, vectors = get_words(sentences)
     word_transform = dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))
     infoboxes, field_transform, t_fields, t_words, field_values = process_infoboxes(u_keys, dicts, encoder)
@@ -226,6 +271,7 @@ if __name__ == '__main__':
     f_names = delexicalize(sentences, dicts, field_values, u_keys)
     output = np.concatenate((encoder.classes_, f_names))
 
+	# Save the processed data
     save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors)
     with open(path + "pickle/" + dataset + "/" + hashed + "/params.txt", "w") as g:
         g.write(" ".join(
