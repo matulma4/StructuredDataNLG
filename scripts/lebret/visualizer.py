@@ -1,9 +1,12 @@
 import sys
-
+import inspect
+import os
 import matplotlib.pylab as plt
 import numpy as np
 import seaborn as sns
-
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
 from config import *
 
 
@@ -14,6 +17,7 @@ def make_heatmap(h_data):
 
 
 def get_attention(m_name):
+    model_name = sys.argv[1]
     from sample import Sample
     from testing import make_sample, global_conditioning, process_infoboxes, load_from_file
     global l, V
@@ -72,29 +76,30 @@ def get_attention(m_name):
         # return vector
 
 
-def make_bar(data, labels, h):
-    colors = ['r', 'g', 'b', 'y', 'c']
+def make_bar(data, labels, h, baseline):
+    colors = ['g']*2 +['b'] + ['y']*2  + ['c']*3
     fig, ax = plt.subplots()
-    index = np.arange(1, len(data[0]) + 1)
-    width = 0.35 / (len(data)/2)
+    index = np.arange(1, len(data) + 1)
+    width = 0.35 
     bar = 0
     for i in range(len(data)):
-        plt.bar(index + bar, data[i], width,
+        plt.bar(i - width/2, data[i], width,
                 color=colors[i],
                 label=labels[i])
-        bar += width
+        # bar += width
     plt.xlabel('Group')
-    plt.ylabel('Scores')
+    plt.ylabel('BLEU')
     plt.title('Results')
-    plt.xticks(index + (bar - width) / 2, ('BLEU-1', 'BLEU-2', 'BLEU-3', 'BLEU-4', 'BLEU', 'Perplexity'))
+    plt.xticks(index-1 + (bar - width) / 2, ('abcd'))
+    plt.axhline(baseline)
     plt.legend()
-
+    
     plt.tight_layout()
     plt.savefig(path + "pictures/" + h + ".png", dpi=300)
 
 
 if __name__ == '__main__':
-    model_name = sys.argv[1]
-    d = [[1, 2, 3, 4], [4, 5, 6, 4]]
-    lab = ["a", "b"]
-    make_bar(d, lab, 'bar')
+    # global/local | remove punc | n | beam 
+    d = [0.2645257132032,0.26864211575348507,0.28183018508296925,0.2726072061388273,0.2787024084272768,0.2779071111844879,0.2782477751992007, 0.2779647131390378]
+    lab = ['Glob/loc','Local','Remove punc','5-gram','15-gram','5','15','20']
+    make_bar(d, lab, 'rest_bleu', 0.2776786961450034)
