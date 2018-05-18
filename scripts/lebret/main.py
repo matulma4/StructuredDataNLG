@@ -23,11 +23,24 @@ def reset(k):
 
 
 def reset_none(k, r):
+	"""
+	Create a list of lists
+
+    Keyword arguments:
+    k -- number of lists
+    r -- size of each list
+    """
     return [[None for _ in range(r)] for _ in range(k)]
 
 
 def keras_log_likelihood(y_true, y_pred):
-    # tf_session = K.get_session()
+	"""
+	Custom loss function used in training
+
+    Keyword arguments:
+    y_true -- gold standard
+    y_pred -- neural network prediction
+    """
     mult = multiply([y_true, y_pred])
     sm = K.sum(mult, axis=1)
     var = K.ones(shape=[batch_len]) * 1e-5
@@ -36,6 +49,13 @@ def keras_log_likelihood(y_true, y_pred):
 
 
 def log_likelihood(y_true, y_pred):
+	"""
+	Emulation of custom loss function used in training
+
+    Keyword arguments:
+    y_true -- gold standard
+    y_pred -- neural network prediction
+    """
     mult = np.multiply(y_true, y_pred)
     sm = np.sum(mult, axis=1)
     z = 1e-5 * np.ones(sm.shape[0])
@@ -44,6 +64,10 @@ def log_likelihood(y_true, y_pred):
 
 
 def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_field_idx, max_glob_word_idx):
+	"""
+	Construct a neural network architecture
+
+    """
     c_input = Input(shape=(l,), name='c_input')
     if use_ft:
         path_to_files = path + "pickle/" + dataset
@@ -114,6 +138,10 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
 
 
 def create_one_sample(idx, s, e, bi, ei, max_l):
+	"""
+	Create a sample for training; includes context and local conditioning
+
+    """
     context = np.array(idx[bi:ei])
     s_context = np.array([np.pad(ss, (0, max_l - len(ss)), mode='constant') for ss in s[bi:ei]])
     e_context = np.array([np.pad(ee, (0, max_l - len(ee)), mode='constant') for ee in e[bi:ei]])
@@ -138,11 +166,12 @@ def dump_garbage():
 
 # TODO make global conditioning more effective
 def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentences):
-    # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset(7)
-    # filecount = 0
+	"""
+	Create samples and train the model on them
+
+    """
     samplecount = 0
     inputs, outputs = reset_none(2, sample_limit)
-    # lr = model.optimizer.lr
     for i in range(len(indices)):
         idx = indices[i]
         s = start[i]
@@ -178,8 +207,6 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             except IndexError:
                 t[-1] = 1.0
             target[j - l] = t
-            # del t
-            # if samplecount == sample_limit:
         global batch_len
         batch_len = len(samples_context)
         input_ls = {'c_input': np.array(samples_context)}
@@ -192,63 +219,35 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
         if use_mix:
             input_ls['mix_input'] = np.array(samples_mix)
         inputs[samplecount] = input_ls
-        # del input_ls
         outputs[samplecount] = target
-        # del target
         samplecount += 1
-        # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = reset(7)
         if samplecount == sample_limit:
             for it in range(n_iter):
                 for ex in range(sample_limit):
                     #
                     loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
-                    # lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
                     print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(loss))
                 model.save(path + "models/" + dataset + "/" + hashed + ".h5")
 
             inputs, outputs = reset_none(2, sample_limit)
             samplecount = 0
-            # print(pred)
-            # pred = model.predict(x=input_ls)
-            # print(log_likelihood(target, pred))
             gc.collect()
-            # process = psutil.Process(os.getpid())
-            # print(process.memory_info().rss)
     for it in range(n_iter):
         for ex in range(samplecount):
             loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
-            # lr *= (
-            # 1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
             print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(
                 loss))
-            model.save(path + "models/" + dataset + "/" + hashed + ".h5")
+		model.save(path + "models/" + dataset + "/" + hashed + ".h5")
 
-            # input_ls = {'c_input': np.array(samples_context), 'mix_input' : np.array(samples_mix)}
-            # if local_cond:
-            #     input_ls['ls_input'] = np.array(samples_ls)
-            #     input_ls['le_input'] = np.array(samples_le)
-            # if global_cond:
-            #     input_ls['gf_input'] = np.array(samples_gf)
-            #     input_ls['gw_input'] = np.array(samples_gw)
-            #
-            # for it in range(n_iter):
-            #     loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
-            #     lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
-            #     pred = np.argmax(model.predict(x=input_ls),axis=1)
-            #     t = np.argmax(target, axis=1)
-            #     acc = float(len(np.where(pred-t == 0)[0]))/float(len(target))*100.0
-            #     print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(loss) + ", learning rate: " + str(K.eval(lr)) + ", Accuracy: " + str(acc))
-
-
-def train(input_ls, target, lr, samplecount):
-    for it in range(n_iter):
-        loss = model.train_on_batch(input_ls, {'activation': np.array(target)})
-        lr *= (1. / (1. + model.optimizer.decay * K.cast(model.optimizer.iterations, K.dtype(model.optimizer.decay))))
-        print("Training epoch " + str(it) + " on " + str(samplecount) + " samples, loss: " + str(
-            loss) + ", learning rate: " + str(K.eval(lr)))
 
 
 def load_from_file(hashed):
+	"""
+	Load data from file
+
+    Keyword arguments:
+    hashed -- name of the file
+    """
     path_to_files = path + "pickle/" + dataset + "/" + hashed
     output = pickle.load(open(path_to_files + "/output.pickle", "rb"))
     start = pickle.load(open(path_to_files + "/start.pickle", "rb"))
@@ -264,11 +263,9 @@ def load_from_file(hashed):
 
 if __name__ == '__main__':
     gc.enable()
-    # gc.set_debug(gc.DEBUG_LEAK)
     global V, n_iter, l, use_ft
     h = sys.argv[1]
     l = int(h[8:10])
-    # n_iter = int(h[10:13])
     use_ft = bool(int(h[13]))
     hashed = h + str(n_iter).zfill(3) + "".join([str(int(boole)) for boole in [local_cond, global_cond, use_mix]])
     alpha = 0.025
@@ -279,10 +276,4 @@ if __name__ == '__main__':
     indices, start, end, t_fields, t_words, infoboxes, output, sentences = load_from_file(h)
     O = output.shape[0] + 1
     model = create_model(loc_dim, f_len, w_len, max_loc_idx, glob_field_dim + 1, glob_word_dim + 1)
-    # for it in range(n_iter):
     create_samples(indices, start, end, t_fields, t_words, infoboxes, loc_dim, output, sentences)
-    # model.save(path + "models/" + dataset + "/model_" + str(n_iter) + ".h5")
-
-    # samples_context, samples_ls, samples_le, samples_gf, samples_gw, samples_mix, target = pickle.load(
-    #     open(path + "samples/" + dataset + "/samples_0.pickle", "rb"))
-    # V = target.shape[1]

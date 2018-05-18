@@ -8,8 +8,6 @@ import pickle
 from keras.models import load_model
 from nltk.translate.bleu_score import sentence_bleu
 
-from beam import Beam
-
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
@@ -35,9 +33,6 @@ def replace_fields(sent, ib):
 def load_from_file(test_set, model_name, h):
     path_to_files = path + "pickle/" + dataset + "/" + h
     output = np.append(pickle.load(open(path_to_files + "/output.pickle", "rb")), "<UNK>")
-    # t_fields = pickle.load(open(path_to_files + "/t_fields.pickle", "rb"))
-    # t_words = pickle.load(open(path_to_files + "/t_words.pickle", "rb"))
-    # infoboxes = pickle.load(open(path_to_test + "/infoboxes.pickle", "rb"))
     infoboxes, u_keys = load_infoboxes(test_path + test_set, test_set)
     field_transform = pickle.load(open(path_to_files + "/field_tf.pickle", "rb"))
     word_transform = pickle.load(open(path_to_files + "/word_tf.pickle", "rb"))
@@ -211,18 +206,13 @@ if __name__ == '__main__':
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
     if mode == 0:
-        start = time.time()
-        gen_sents, gen_scores = test_model(model, infoboxes[:10], field_transform, word_transform, output)
-        print(time.time()-start)
+        gen_sents, gen_scores = test_model(model, infoboxes[:1000], field_transform, word_transform, output)
         sents = load_sentences(test_path + test_set + "/", test_set)
         bleu = []
-        smooth = SmoothingFunction().method4
+        smooth = SmoothingFunction().method7
         for pred, true in zip(gen_sents, sents):
             bleu.append(sentence_bleu([true], pred, smoothing_function=smooth))
-        print("BLEU: ", np.mean(bleu))
-        # else:
-        print("Perplexity: ", np.mean(gen_scores))
-
+        print("BLEU: ", np.mean(bleu), "Perplexity: ", np.mean(gen_scores))
     else:
         sentences = load_sentences("","")
         test_accuracy(infoboxes, field_transform, word_transform, sentences)
