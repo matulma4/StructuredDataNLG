@@ -9,8 +9,8 @@ from config import *
 
 
 def get_occurring(ls, n):
-	"""
-	Obtain elements of list occuring at least n times in it
+    """
+    Obtain elements of list occuring at least n times in it
 
     Keyword arguments:
     ls -- a list
@@ -21,8 +21,8 @@ def get_occurring(ls, n):
 
 
 def load_infoboxes(path, dataset):
-	"""
-	Load tables from a file
+    """
+    Load tables from a file
 
     Keyword arguments:
     path -- path to file
@@ -34,7 +34,7 @@ def load_infoboxes(path, dataset):
     with open(path + "/" + dataset + ".box", encoding="utf-8") as f:
         for person_box in f:
             info = [k.split(":") for k in person_box.strip().split("\t")]
-			# Use only pairs where the value is not <none>
+            # Use only pairs where the value is not <none>
             result.append(dict([(v[0], v[1]) for v in info if v[1] != "<none>"]))
             unique_keys += ["_".join(s.split("_")[:-1]) for s in result[-1].keys()]
             i += 1
@@ -45,8 +45,8 @@ def load_infoboxes(path, dataset):
 
 
 def load_sentences(pth, d_set):
-	"""
-	Load natural language sentences from a file
+    """
+    Load natural language sentences from a file
 
     Keyword arguments:
     pth -- path to file
@@ -69,8 +69,8 @@ def load_sentences(pth, d_set):
 
 
 def create_vocabulary(sents):
-	"""
-	Create a vocabulary from a list of sentences
+    """
+    Create a vocabulary from a list of sentences
 
     Keyword arguments:
     sents -- list of sentences

@@ -23,8 +23,8 @@ def reset(k):
 
 
 def reset_none(k, r):
-	"""
-	Create a list of lists
+    """
+    Create a list of lists
 
     Keyword arguments:
     k -- number of lists
@@ -34,8 +34,8 @@ def reset_none(k, r):
 
 
 def keras_log_likelihood(y_true, y_pred):
-	"""
-	Custom loss function used in training
+    """
+    Custom loss function used in training
 
     Keyword arguments:
     y_true -- gold standard
@@ -49,8 +49,8 @@ def keras_log_likelihood(y_true, y_pred):
 
 
 def log_likelihood(y_true, y_pred):
-	"""
-	Emulation of custom loss function used in training
+    """
+    Emulation of custom loss function used in training
 
     Keyword arguments:
     y_true -- gold standard
@@ -64,8 +64,8 @@ def log_likelihood(y_true, y_pred):
 
 
 def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_field_idx, max_glob_word_idx):
-	"""
-	Construct a neural network architecture
+    """
+    Construct a neural network architecture
 
     """
     c_input = Input(shape=(l,), name='c_input')
@@ -138,8 +138,8 @@ def create_model(loc_dim, glob_field_dim, glob_word_dim, max_loc_idx, max_glob_f
 
 
 def create_one_sample(idx, s, e, bi, ei, max_l):
-	"""
-	Create a sample for training; includes context and local conditioning
+    """
+    Create a sample for training; includes context and local conditioning
 
     """
     context = np.array(idx[bi:ei])
@@ -166,8 +166,8 @@ def dump_garbage():
 
 # TODO make global conditioning more effective
 def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentences):
-	"""
-	Create samples and train the model on them
+    """
+    Create samples and train the model on them
 
     """
     samplecount = 0
@@ -237,13 +237,13 @@ def create_samples(indices, start, end, t_f, t_w, fields, max_l, output, sentenc
             loss = model.train_on_batch(inputs[ex], {'activation': np.array(outputs[ex])})
             print("Training epoch " + str(it) + " on " + str(len(outputs[ex])) + " samples, loss: " + str(
                 loss))
-		model.save(path + "models/" + dataset + "/" + hashed + ".h5")
+        model.save(path + "models/" + dataset + "/" + hashed + ".h5")
 
 
 
 def load_from_file(hashed):
-	"""
-	Load data from file
+    """
+    Load data from file
 
     Keyword arguments:
     hashed -- name of the file

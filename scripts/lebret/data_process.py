@@ -21,8 +21,8 @@ from data_loader import load_sentences, load_infoboxes
 
 
 def get_words(sentences):
-	"""
-	Obtain encoded vocabulary, the map converting words to numbers and fastText vectors, if needed.
+    """
+    Obtain encoded vocabulary, the map converting words to numbers and fastText vectors, if needed.
 
     Keyword arguments:
     sentences -- list of lists of strings representing words in sentences
@@ -39,8 +39,8 @@ def get_words(sentences):
 
 
 def local_conditioning(tf, f, sentences):
-	"""
-	Create local embeddings for the sentences
+    """
+    Create local embeddings for the sentences
 
     Keyword arguments:
     tf -- map converting keys to indices
@@ -73,8 +73,8 @@ def local_conditioning(tf, f, sentences):
 
 
 def replace_oov(sentences, vocabulary):
-	"""
-	Replace out of vocabulary words in sentences with tokens and prepend them
+    """
+    Replace out of vocabulary words in sentences with tokens and prepend them
 
     Keyword arguments:
     sentences -- list of lists of strings representing words in sentences
@@ -95,8 +95,8 @@ def replace_oov(sentences, vocabulary):
 
 
 def transform_to_indices(data):
-	"""
-	Convert words to indices
+    """
+    Convert words to indices
 
     Keyword arguments:
     data -- list of sentences
@@ -110,8 +110,8 @@ def transform_to_indices(data):
 
 
 def get_most_frequent(all_sents, sub_numbers):
-	"""
-	Create a vocabulary by keeping only words occurring V times
+    """
+    Create a vocabulary by keeping only words occurring V times
 
     Keyword arguments:
     all_sents -- list of lists of strings representing words in sentences
@@ -128,8 +128,8 @@ def get_most_frequent(all_sents, sub_numbers):
 
 
 def process_infoboxes(unique_keys, dict_list, encoder):
-	"""
-	Transform field names into indices, filter
+    """
+    Transform field names into indices, filter
 
     Keyword arguments:
     unique_keys -- list of keys
@@ -187,8 +187,8 @@ def process_infoboxes(unique_keys, dict_list, encoder):
 
 
 def delexicalize(sentences, tables, vocabulary, keys):
-	"""
-	Replace out of vocabulary words with field names
+    """
+    Replace out of vocabulary words with field names
 
     Keyword arguments:
     sentences -- list of lists of strings representing words in sentences
@@ -219,9 +219,9 @@ def delexicalize(sentences, tables, vocabulary, keys):
 
 
 def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors):
-	"""
-	Save processed objects to file
-	
+    """
+    Save processed objects to file
+    
     """
     path_to_files = path + "pickle/" + dataset + "/" + hashed
     pickle.dump(output, open(path_to_files + "/output.pickle", "wb"))
@@ -238,7 +238,7 @@ def save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, fiel
 
 if __name__ == '__main__':
 
-	# Create unique name
+    # Create unique name
     hashed = dt.datetime.now().strftime("%Y%m%d")
     hashed += str(l).zfill(2)
     hashed += str(int(V/1000)).zfill(2)
@@ -249,7 +249,7 @@ if __name__ == '__main__':
     except FileExistsError:
         pass
 
-	# Load data from file
+    # Load data from file
     dicts, u_keys = load_infoboxes(data_path, dataset)
     sentences = load_sentences(data_path, dataset)
 
@@ -259,7 +259,7 @@ if __name__ == '__main__':
     w_len = 0
     w_count = 0
 
-	# Process the data
+    # Process the data
     indices, encoder, max_word_idx, vectors = get_words(sentences)
     word_transform = dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))
     infoboxes, field_transform, t_fields, t_words, field_values = process_infoboxes(u_keys, dicts, encoder)
@@ -271,7 +271,7 @@ if __name__ == '__main__':
     f_names = delexicalize(sentences, dicts, field_values, u_keys)
     output = np.concatenate((encoder.classes_, f_names))
 
-	# Save the processed data
+    # Save the processed data
     save_to_file(output, indices, start, end, t_fields, t_words, infoboxes, field_transform, word_transform, vectors)
     with open(path + "pickle/" + dataset + "/" + hashed + "/params.txt", "w") as g:
         g.write(" ".join(
