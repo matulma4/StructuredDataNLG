@@ -1,28 +1,42 @@
 import inspect
 import os
 import sys
-import time
 
 import numpy as np
 import pickle
 from keras.models import load_model
 from nltk.translate.bleu_score import sentence_bleu
+from sample import Sample
+from main import create_one_sample, keras_log_likelihood
+from data_loader import load_infoboxes, load_sentences
+from nltk.translate.bleu_score import SmoothingFunction
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 from config import *
-from sample import Sample, SampleHolder
-from main import create_one_sample, keras_log_likelihood
-from data_loader import load_infoboxes, load_sentences
-from nltk.translate.bleu_score import SmoothingFunction
+
 
 def get_n_best(ls, n):
+    """
+    Obtain n highest elements in a list
+
+    Keyword arguments:
+    ls -- a list
+    n -- number of elements to retrieve
+    """
     arr = np.array(ls)
     return arr.argsort()[-n:][::-1]
 
 
 def replace_fields(sent, ib):
+    """
+    Replace delexicalized token with a word
+
+    Keyword arguments:
+    sent -- a list of words
+    ib -- dict containing infobox table
+    """
     for w in range(len(sent)):
         word = sent[w]
         if word in ib.keys():
@@ -31,6 +45,10 @@ def replace_fields(sent, ib):
 
 
 def load_from_file(test_set, model_name, h):
+    """
+    Load various data from file
+
+    """
     path_to_files = path + "pickle/" + dataset + "/" + h
     output = np.append(pickle.load(open(path_to_files + "/output.pickle", "rb")), "<UNK>")
     infoboxes, u_keys = load_infoboxes(test_path + test_set, test_set)
@@ -42,11 +60,26 @@ def load_from_file(test_set, model_name, h):
 
 
 def make_sample(b, loc_dim):
+    """
+    Create one sample of context words, local and global conditioning
+
+    Keyword arguments:
+    b -- object of Sample class
+    loc_dim -- dimension of sample
+    """
     context, s_context, e_context = create_one_sample(b.indexes, b.starts, b.ends, -l, None, loc_dim)
     return [context], [s_context], [e_context]
 
 
 def process_infoboxes(dict_list, field_transform, word_transform):
+    """
+    Transform infobox elements from strings to ints
+
+    Keyword arguments:
+    dict_list -- a list of infoboxes
+    field_transform -- dict mapping field names to indices
+    word_transform -- dict mapping field values to indices
+    """
     table_fields = []
     table_words = []
     infoboxes = []
@@ -80,6 +113,10 @@ def process_infoboxes(dict_list, field_transform, word_transform):
 
 
 def beam_search(model, size, sent_length, output, word_tf, field_tf, gf, gw, infobox, mix_sample, loc_dim, output_beam):
+    """
+    Decode a sentence using the model
+
+    """
     beam = [
         Sample(0.0, ["s" + str(i) for i in range(l)], [word_tf["s" + str(i)] for i in range(l - 1)], word_tf, field_tf,
                [[len(field_tf) * l + 2] for i in range(l - 1)], [[len(field_tf) * l + 2] for i in range(l - 1)],
@@ -89,7 +126,7 @@ def beam_search(model, size, sent_length, output, word_tf, field_tf, gf, gw, inf
         new_beam = []
         new_score = []
         for b in beam:
-            if len(b.sentence) == sent_length:# or b.sentence[-1] == '.':
+            if len(b.sentence) == sent_length:  # or b.sentence[-1] == '.':
                 return b.sentence, b.score
                 # predict for each element in beam
             samples_context, samples_ls, samples_le = make_sample(b, loc_dim)
@@ -116,6 +153,10 @@ def beam_search(model, size, sent_length, output, word_tf, field_tf, gf, gw, inf
 
 
 def global_conditioning(t_f, t_w, f_len, w_len):
+    """
+    Create a global conditioning sample
+
+    """
     if f_len >= len(t_f):
         gf = [np.pad(t_f, (0, f_len - len(t_f)), mode='constant')]
     else:
@@ -128,13 +169,16 @@ def global_conditioning(t_f, t_w, f_len, w_len):
 
 
 def test_model(model, infoboxes, f_tf, w_tf, output):
+    """
+    Run beam search over all testing sentences
+
+    """
     outfile = open(m_name + ".out", "w")
     if os.path.exists(path + "pickle/" + dataset + "/" + h + "/test_ib.pickle"):
         t_fields, t_words, ib = pickle.load(open(path + "pickle/" + dataset + "/" + h + "/test_ib.pickle", "rb"))
     else:
         t_fields, t_words, ib = process_infoboxes(infoboxes, f_tf, w_tf)
         pickle.dump((t_fields, t_words, ib), open(path + "pickle/" + dataset + "/" + h + "/test_ib.pickle", "wb"))
-    # indexes = [2]
     generated = []
     scores = []
     for i in range(len(ib)):
@@ -153,45 +197,6 @@ def test_model(model, infoboxes, f_tf, w_tf, output):
     return generated, scores
 
 
-def test_one_sentence(gf, gw, c_init, s_init, e_init, sentence, output, ib, f_tf, w_tf):
-    samples_context = c_init
-    samples_ls = s_init
-    samples_le = e_init
-    acc = 0.0
-    for j in range(len(sentence)):
-        word = sentence[j]
-        prediction = model.predict(
-            {'c_input': np.array(samples_context), 'ls_input': np.array(samples_ls),
-             'le_input': np.array(samples_le),
-             'gf_input': np.array(gf),
-             'gw_input': np.array(gw)})
-        pred_word = output[get_n_best(prediction[0], 1)[0]]
-        # TODO better metric
-        if pred_word == word:
-            acc += 1.0
-        samples_context = samples_context[1:] + [w_tf[word]]
-        samples_ls = samples_ls[1:] + [list(set([j[1] + j[0] * l for j in ib[word]]))]
-        samples_le = samples_le[1:] + [list(set([j[2] + j[0] * l for j in ib[word]]))]
-
-    return acc, len(sentence)
-
-
-def test_accuracy(infoboxes, f_tf, w_tf, sentences):
-    t_fields, t_words, ib = process_infoboxes(infoboxes, f_tf, w_tf)
-    accuracy = 0.0
-    total = 0.0
-    for i in range(len(ib)):
-        gf, gw = global_conditioning(t_fields[i], t_words[i])
-        c_init = [[w_tf["s" + str(i)] for i in range(l)]]
-        ls_init = [[] for i in range(l)]
-        le_init = [[] for i in range(l)]
-        acc, s = test_one_sentence(gf, gw, c_init, ls_init, le_init, sentences[i], output, ib[i], f_tf, w_tf)
-        accuracy += acc
-        total += float(s)
-
-    print(accuracy / total)
-
-
 if __name__ == '__main__':
     output_beam = False
     m_name = sys.argv[1]
@@ -199,20 +204,21 @@ if __name__ == '__main__':
     global l
     l = int(m_name[8:10])
     test_set = "test_r"
-    mode = 0
     h = m_name[:-6]
+
+    # Load data
     infoboxes, output, model, field_transform, word_transform = load_from_file(test_set, m_name, h)
     with open(path + "pickle/" + dataset + "/" + h + "/params.txt") as f:
         V, max_loc_idx, glob_field_dim, glob_word_dim, loc_dim, f_len, w_len, w_count = [int(a) for a in
                                                                                          f.read().split()]
-    if mode == 0:
-        gen_sents, gen_scores = test_model(model, infoboxes[:1000], field_transform, word_transform, output)
-        sents = load_sentences(test_path + test_set + "/", test_set)
-        bleu = []
-        smooth = SmoothingFunction().method7
-        for pred, true in zip(gen_sents, sents):
-            bleu.append(sentence_bleu([true], pred, smoothing_function=smooth))
-        print("BLEU: ", np.mean(bleu), "Perplexity: ", np.mean(gen_scores))
-    else:
-        sentences = load_sentences("","")
-        test_accuracy(infoboxes, field_transform, word_transform, sentences)
+
+    # Generate sentences
+    gen_sents, gen_scores = test_model(model, infoboxes[:1000], field_transform, word_transform, output)
+
+    # Compute BLEU and perplexity
+    sents = load_sentences(test_path + test_set + "/", test_set)
+    bleu = []
+    smooth = SmoothingFunction().method7
+    for pred, true in zip(gen_sents, sents):
+        bleu.append(sentence_bleu([true], pred, smoothing_function=smooth))
+    print("BLEU: ", np.mean(bleu), "Perplexity: ", np.mean(gen_scores))

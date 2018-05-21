@@ -11,6 +11,9 @@ sys.path.insert(0, parentdir)
 
 class Sample:
     def __init__(self, score, sentence, indexes, t_words, t_fields, starts, ends, infobox):
+        """
+        Class representing one candidate of the beam search
+        """
         self.sentence = sentence
         self.score = score
         try:
@@ -26,10 +29,3 @@ class Sample:
 
     def __repr__(self):
         return " ".join(self.sentence[l:])
-
-
-class SampleHolder:
-    def __init__(self, b, score, word):
-        self.b = b
-        self.score = b.score + np.log(score)
-        self.word = word
